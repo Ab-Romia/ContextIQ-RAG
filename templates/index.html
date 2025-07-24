@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ContextIQ - Intelligent Context-Aware Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+        }
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: #8b5cf6;
+            animation: typing 1.4s infinite ease-in-out;
+            margin-right: 4px;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        .scroll-smooth { scroll-behavior: smooth; }
+        .scroll-container::-webkit-scrollbar { width: 6px; }
+        .scroll-container::-webkit-scrollbar-track { background: transparent; }
+        .scroll-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .scroll-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="font-inter text-white overflow-hidden">
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
+        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow animation-delay-2000"></div>
+    </div>
+
+    <div class="relative z-10 flex items-center justify-center min-h-screen p-4">
+        <div class="w-full max-w-7xl h-[95vh] glass-effect rounded-3xl shadow-2xl flex flex-col">
+
+            <div class="flex items-center justify-between p-6 border-b border-slate-600/50">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold gradient-text">Context AI by Ab-Romia</h1>
+                        <p class="text-sm text-slate-400">Intelligent Context-Aware Assistant</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden">
+                <div class="w-1/2 flex flex-col border-r border-slate-600/50">
+                    <div class="p-6 border-b border-slate-600/30">
+                        <h2 class="text-lg font-semibold text-slate-200">Context Management</h2>
+                        <p class="text-sm text-slate-400 mt-1">Provide context for the AI to analyze.</p>
+                    </div>
+                    <div class="flex-1 p-6 flex flex-col">
+                        <textarea id="context-input" class="w-full h-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:outline-none resize-none transition-all duration-200 scroll-container" placeholder="Paste your documents, meeting notes, research papers, or any relevant context here..."></textarea>
+                        <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+                            <div>Characters: <span id="char-count">0</span> | Words: <span id="word-count">0</span></div>
+                            <button id="clear-context" class="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors duration-200">Clear</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-1/2 flex flex-col">
+                    <div class="p-6 border-b border-slate-600/30">
+                        <h2 class="text-lg font-semibold text-slate-200">AI Assistant</h2>
+                        <p class="text-sm text-slate-400 mt-1">Ask questions about your context.</p>
+                    </div>
+                    <div id="chat-container" class="flex-1 overflow-y-auto scroll-smooth scroll-container p-6 space-y-6">
+                        <!-- Welcome Message -->
+                    </div>
+                    <div class="p-6 border-t border-slate-600/30">
+                        <div class="flex items-start space-x-3">
+                            <div class="flex-1 relative">
+                                <textarea id="chat-input" rows="1" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-xl px-4 py-3 pr-12 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:outline-none resize-none transition-all duration-200" placeholder="Ask a question..." style="max-height: 120px;"></textarea>
+                                <button id="send-button" class="absolute right-2 bottom-2 p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between mt-3 text-xs text-slate-400">
+                            <div id="typing-indicator" class="hidden">
+                                <div class="typing-indicator">
+                                    <div class="typing-dot"></div>
+                                    <div class="typing-dot"></div>
+                                    <div class="typing-dot"></div>
+                                    <span class="ml-2">AI is thinking...</span>
+                                </div>
+                            </div>
+                            <div id="response-time" class="hidden ml-auto">
+                                Response time: <span class="text-indigo-400 font-medium">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="../static/js/app.js"></script>
+
+</body>
+</html>
