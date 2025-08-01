@@ -199,25 +199,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/) for the excellent web framework
-- [ChromaDB](https://www.trychroma.com/) for vector database capabilities
-- [OpenRouter](https://openrouter.ai/) for AI model access
-- [SentenceTransformers](https://www.sbert.net/) for embedding generation
-- [Tailwind CSS](https://tailwindcss.com/) for the beautiful UI components
-
-## 📞 Support
-
-If you encounter any issues or have questions, please:
-1. Check the [Issues](https://github.com/Ab-Romia/ContextIQ-RAG/issues) page
-2. Create a new issue with detailed information
-3. Contact the maintainer: Ab-Romia
 
 ---
 
-**Built with ❤️ by Ab-Romia** | **Refactored for Clarity & Efficiency**
+**Built by Ab-Romia** | **Refactored for Clarity & Efficiency**
