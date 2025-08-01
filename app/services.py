@@ -1,13 +1,10 @@
-from . import rag_setup
-from .schemas import ChatRequest, DocumentRequest
-import textwrap
 import asyncio
 import functools
-import time
 import logging
-from functools import lru_cache
-
-# Configure logging
+import textwrap
+import time
+import rag_setup
+from schemas import ChatRequest, DocumentRequest
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -16,156 +13,146 @@ logging.basicConfig(
 logger = logging.getLogger("rag-service")
 
 
+# A simple cache to store recent responses to avoid redundant API calls for the same query.
+# The cache stores a tuple of (timestamp, response).
+_response_cache = {}
+CACHE_EXPIRATION_SECONDS = 600  # 10 minutes
+
+
 def index_document(request_data: DocumentRequest) -> int:
-    """
-    Chunks text, creates embeddings, and stores them in the vector DB.
-    """
-    logger.info(f"Starting document indexing process. Text length: {len(request_data.context)}")
+    logger.info("Starting document indexing process.")
 
-    # 1. Chunk the document
-    start_time = time.time()
-    text_chunks = [chunk for chunk in textwrap.wrap(request_data.context, width=500, replace_whitespace=False)]
-    chunk_time = time.time() - start_time
-    logger.info(f"Document chunked into {len(text_chunks)} segments ({chunk_time:.2f}s)")
+    try:
+        # Step 1: Clear any existing documents properly
+        existing_ids = rag_setup.collection.get()["ids"]
+        if existing_ids:
+            rag_setup.collection.delete(ids=existing_ids)
+        logger.info("Cleared existing documents from vector collection.")
 
-    # 2. Embed and store chunks in ChromaDB
-    start_time = time.time()
-    rag_setup.collection.add(
-        documents=text_chunks,
-        ids=[f"doc_chunk_{i}" for i in range(len(text_chunks))]
-    )
-    embed_time = time.time() - start_time
-    logger.info(f"Chunks embedded and stored in vector DB ({embed_time:.2f}s)")
+        # Step 2: Chunk document
+        text_chunks = textwrap.wrap(
+            request_data.context,
+            width=800,
+            break_long_words=False,
+            replace_whitespace=False
+        )
 
-    total_count = rag_setup.collection.count()
-    logger.info(f"Vector DB now contains {total_count} total chunks")
+        if not text_chunks:
+            logger.warning("No text chunks were generated.")
+            return 0
 
-    return len(text_chunks)
+        # Step 3: Add chunks to ChromaDB
+        chunk_ids = [f"doc_chunk_{i}_{int(time.time())}" for i in range(len(text_chunks))]
+        logger.info(f"Attempting to add {len(chunk_ids)} chunks to ChromaDB...")
+        rag_setup.collection.add(documents=text_chunks, ids=chunk_ids)
+
+        return len(text_chunks)
+    except Exception as e:
+        logger.error(f"Error during indexing: {str(e)}", exc_info=True)
+        raise
+
+def clear_index():
+    """Clears all documents from the vector database."""
+    rag_setup.collection.delete(where={})
+    logger.info("Successfully cleared the vector index.")
 
 
 async def get_rag_response(request_data: ChatRequest) -> str:
     """
-    Performs RAG with timeout and caching improvements
+    Performs the RAG pipeline: checks cache, retrieves context, generates a response.
     """
     start_total = time.time()
     logger.info(f"Processing query: '{request_data.prompt}'")
 
     try:
-        # Define cache key at the beginning
-        cache_key = f"{request_data.prompt}"
-
-        # Check cache first
-        logger.info("Checking response cache...")
-        cached_response = _get_cached_response(cache_key)
+        # Step 1: Check cache for a recent, identical query
+        cached_response = _get_cached_response(request_data.prompt)
         if cached_response:
-            logger.info("Cache hit! Returning cached response")
-            return f"{cached_response}\n(Cached response)"
-        logger.info("Cache miss, continuing with retrieval")
+            logger.info("Cache hit! Returning cached response.")
+            return f"{cached_response}\n\n(This response was retrieved from cache)"
 
-        # Check collection status
-        collection_count = rag_setup.collection.count()
-        logger.info(f"Vector DB contains {collection_count} chunks")
+        logger.info("Cache miss. Proceeding with RAG pipeline.")
 
-        if collection_count == 0:
-            logger.warning("Empty vector database, returning explanation message")
-            return "The vector database is empty. Please provide context text in the left panel and it will be indexed automatically."
+        # Step 2: Check if the vector database has any content
+        if rag_setup.collection.count() == 0:
+            logger.warning("Vector DB is empty. Cannot answer query.")
+            return "The knowledge base is empty. Please provide some context in the left panel and click 'Index Context' before asking questions."
 
-        # Retrieve with timeout
+        # Step 3: Retrieve relevant chunks from ChromaDB
         logger.info("Retrieving relevant chunks from vector DB...")
-        start_retrieve = time.time()
-        retrieved_chunks = await asyncio.wait_for(
-            _retrieve_chunks(request_data.prompt),
-            timeout=5.0
-        )
-        retrieve_time = time.time() - start_retrieve
-        logger.info(f"Retrieved {len(retrieved_chunks['documents'][0])} chunks ({retrieve_time:.2f}s)")
+        retrieved_chunks = await _retrieve_chunks_async(request_data.prompt)
 
-        # Check if any relevant chunks were found
-        if len(retrieved_chunks['documents'][0]) == 0:
-            logger.warning("No relevant chunks found in the vector DB")
-            return "No relevant information was found in the provided context."
+        if not retrieved_chunks or not retrieved_chunks.get('documents') or not retrieved_chunks['documents'][0]:
+            logger.warning("No relevant chunks found in the vector DB for this query.")
+            return "I could not find any relevant information in the provided context to answer your question."
 
-        # Format and generate
-        logger.info("Preparing prompt with retrieved context...")
-        context_chunks = retrieved_chunks['documents'][0]
-        context_for_prompt = "\n\n".join(context_chunks)
+        context_for_prompt = "\n\n---\n\n".join(retrieved_chunks['documents'][0])
 
+        # Step 4: Construct the final prompt for the LLM
         full_prompt = (
-            "Based strictly and only on the following context, please answer the user's question. "
-            "Do not use any external knowledge. If the answer cannot be found in the context, state that clearly.\n\n"
+            "You are a helpful AI assistant. Based strictly and only on the following context, "
+            "please answer the user's question. Do not use any external knowledge or make assumptions. "
+            "If the answer cannot be found in the context, state that clearly.\n\n"
             "--- CONTEXT START ---\n"
             f"{context_for_prompt}\n"
             "--- CONTEXT END ---\n\n"
             f'User\'s Question: "{request_data.prompt}"'
         )
-        logger.info(f"Prompt ready, length: {len(full_prompt)} characters")
 
-        # Generate response with timeout
-        logger.info("Generating response from Gemini API...")
-        start_generate = time.time()
-        response_text = await asyncio.wait_for(
-            _generate_response(full_prompt),
-            timeout=15.0
-        )
-        generate_time = time.time() - start_generate
-        logger.info(f"Response generated ({generate_time:.2f}s)")
+        # Step 5: Generate the response using the LLM
+        logger.info("Generating response from OpenRouter...")
+        response_text = await _generate_response_async(full_prompt)
 
-        # Cache the response
-        logger.info("Caching response for future queries")
-        _cache_response(cache_key, response_text)
+        # Step 6: Cache the newly generated response
+        _cache_response(request_data.prompt, response_text)
 
         total_time = time.time() - start_total
         logger.info(f"Total processing time: {total_time:.2f}s")
         return response_text
 
     except asyncio.TimeoutError:
-        logger.error("Request timed out")
+        logger.error("Request timed out during retrieval or generation.")
         return "The request timed out. Please try again or simplify your question."
     except Exception as e:
-        logger.error(f"Error during processing: {str(e)}", exc_info=True)
-        return f"An error occurred: {str(e)}"
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        return f"An unexpected error occurred: {e}"
 
 
-# Async wrapper for ChromaDB calls
-async def _retrieve_chunks(prompt):
-    logger.debug(f"Executing vector query: '{prompt}'")
+# --- ASYNC WRAPPERS & CACHE HELPERS ---
+
+async def _retrieve_chunks_async(prompt: str):
+    """Asynchronously queries the ChromaDB collection."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        functools.partial(
-            rag_setup.collection.query,
-            query_texts=[prompt],
-            n_results=3
-        )
+        functools.partial(rag_setup.collection.query, query_texts=[prompt], n_results=3)
     )
 
 
-# Async wrapper for Gemini calls
-async def _generate_response(prompt):
-    logger.debug("Sending prompt to Gemini API")
+async def _generate_response_async(full_prompt: str):
+    """Asynchronously calls the LLM to generate content."""
+
+
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(
+    return await loop.run_in_executor(
         None,
-        functools.partial(
-            rag_setup.generation_model.generate_content,
-            prompt
-        )
+        rag_setup.generation_model.generate_content,
+        full_prompt
     )
-    return response.text
 
-
-# Simple in-memory cache
-_response_cache = {}
-
-
-def _get_cached_response(key):
+def _get_cached_response(key: str):
+    """Checks the cache for a valid (non-expired) entry."""
     if key in _response_cache:
         timestamp, response = _response_cache[key]
-        # Cache expires after 10 minutes
-        if time.time() - timestamp < 600:
+        if time.time() - timestamp < CACHE_EXPIRATION_SECONDS:
             return response
+        else:
+            # Expired, remove from cache
+            del _response_cache[key]
     return None
 
 
-def _cache_response(key, response):
+def _cache_response(key: str, response: str):
+    """Adds a response to the cache with the current timestamp."""
     _response_cache[key] = (time.time(), response)
+
