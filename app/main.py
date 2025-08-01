@@ -67,6 +67,23 @@ async def generate_response(chat_request: schemas.ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/v1/task", response_model=schemas.TaskResponse)
+async def execute_task(task_request: schemas.TaskRequest):
+    """
+    Executes a specific task (e.g., summarize, plan) based on the provided context.
+    """
+    if not config.settings.OPENROUTER_API_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="OpenRouter API key is not configured on the server."
+        )
+    try:
+        result = await services.execute_task(task_request)
+        return schemas.TaskResponse(result=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):

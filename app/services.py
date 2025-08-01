@@ -4,7 +4,7 @@ import logging
 import textwrap
 import time
 import rag_setup
-from schemas import ChatRequest, DocumentRequest
+from schemas import ChatRequest, DocumentRequest, TaskRequest
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -118,6 +118,44 @@ async def get_rag_response(request_data: ChatRequest) -> str:
         return f"An unexpected error occurred: {e}"
 
 
+async def execute_task(request_data: TaskRequest) -> str:
+    """
+    Executes a specific task on the given context.
+    """
+    start_total = time.time()
+    logger.info(f"Executing task '{request_data.task_type}' with prompt: '{request_data.prompt}'")
+
+    try:
+        # For tasks, we use the full context, not just retrieved chunks
+        context = request_data.context
+        if not context:
+            return "Context is empty. Please provide some text in the 'Knowledge Base' to perform a task."
+
+        # Construct the prompt based on the task type
+        if request_data.task_type == "summarize":
+            full_prompt = f"Summarize the following text:\n\n---\n{context}"
+        elif request_data.task_type == "plan":
+            full_prompt = f"Based on the following context, create a detailed action plan. If a specific goal is provided in the prompt, tailor the plan to that goal.\n\n--- CONTEXT ---\n{context}\n\n--- GOAL ---\n{request_data.prompt or 'General objective derived from context'}"
+        elif request_data.task_type == "creative":
+            full_prompt = f"Use the following text as inspiration to write a creative piece (e.g., a poem, a short story, a metaphor). The user's prompt can guide the style or topic.\n\n--- INSPIRATION ---\n{context}\n\n--- PROMPT ---\n{request_data.prompt or 'Write a short poem'}"
+        else:
+            return "Invalid task type specified."
+
+        # Generate the response
+        logger.info("Generating task-based response from OpenRouter...")
+        response_text = await _generate_response_async(full_prompt)
+
+        total_time = time.time() - start_total
+        logger.info(f"Task execution time: {total_time:.2f}s")
+        return response_text
+
+    except asyncio.TimeoutError:
+        logger.error("Request timed out during task execution.")
+        return "The request timed out. Please try again."
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during task execution: {e}", exc_info=True)
+        return f"An unexpected error occurred: {e}"
+
 # --- ASYNC WRAPPERS & CACHE HELPERS ---
 
 async def _retrieve_chunks_async(prompt: str):
@@ -155,4 +193,3 @@ def _get_cached_response(key: str):
 def _cache_response(key: str, response: str):
     """Adds a response to the cache with the current timestamp."""
     _response_cache[key] = (time.time(), response)
-
