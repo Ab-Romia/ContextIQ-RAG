@@ -1,9 +1,9 @@
 fastapi
 uvicorn
+gunicorn
+chromadb
+sentence-transformers
+openai
 pydantic
 pydantic-settings
 python-dotenv
-httpx
-jinja2
-google-generativeai
-chromadb
