@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 
 class DocumentRequest(BaseModel):
     """
@@ -20,11 +21,26 @@ class ChatRequest(BaseModel):
         description="The user's question to be answered based on the indexed context."
     )
 
+class TaskRequest(BaseModel):
+    """
+    Schema for executing a specific task like summarization or planning.
+    """
+    context: str = Field(..., description="The full context for the task.")
+    task_type: str = Field(..., description="The type of task to perform (e.g., 'summarize', 'plan').")
+    prompt: Optional[str] = Field(None, description="An optional prompt to guide the task.")
+
+
 class ChatResponse(BaseModel):
     """
     Schema for the AI's response.
     """
     response: str
+
+class TaskResponse(BaseModel):
+    """
+    Schema for the result of a task.
+    """
+    result: str
 
 class IndexResponse(BaseModel):
     """
