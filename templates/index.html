@@ -29,17 +29,30 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
-        .glass-effect { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
-        .gradient-text { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .typing-indicator { display: inline-flex; align-items: center; }
-        .typing-dot { width: 6px; height: 6px; border-radius: 50%; background-color: #8b5cf6; animation: typing 1.4s infinite ease-in-out; margin-right: 4px; }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes typing { 0%, 80%, 100% { transform: scale(0.8); opacity: 0.3; } 40% { transform: scale(1); opacity: 1; } }
+        /* General styling for a modern look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            overflow-x: hidden; /* Prevent horizontal scroll */
+        }
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Custom scrollbar for a cleaner UI */
         .scroll-container::-webkit-scrollbar { width: 6px; }
         .scroll-container::-webkit-scrollbar-track { background: transparent; }
         .scroll-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        /* Styling for markdown content rendered by marked.js */
         .markdown-content { word-wrap: break-word; }
         .markdown-content p { margin-bottom: 0.75rem; }
         .markdown-content p:last-child { margin-bottom: 0; }
@@ -51,38 +64,95 @@
         .markdown-content ol { list-style-type: decimal; }
         .markdown-content table { border-collapse: collapse; width: 100%; margin-bottom: 0.75rem; }
         .markdown-content th, .markdown-content td { border: 1px solid rgba(148, 163, 184, 0.2); padding: 0.5rem; text-align: left; }
-
     </style>
 </head>
-<body class="font-inter text-white overflow-hidden">
+<body class="font-inter text-white">
+    <!-- Background decorative elements -->
     <div class="fixed inset-0 -z-10">
         <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
         <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow animation-delay-2000"></div>
     </div>
 
-    <div class="relative z-10 flex items-center justify-center min-h-screen p-4">
-        <div class="w-[98%] h-[95vh] glass-effect rounded-3xl shadow-2xl flex flex-col">
+    <!-- Main container for the entire application -->
+    <div class="relative z-10 flex items-center justify-center min-h-screen p-2 sm:p-4">
+        <div class="w-full max-w-7xl min-h-[95vh] glass-effect rounded-3xl shadow-2xl flex flex-col">
 
-            <header class="flex items-center justify-between p-6 border-b border-slate-600/50">
+            <!-- Header Section -->
+            <header class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-600/50 flex-wrap">
                 <div class="flex items-center space-x-4">
-                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold gradient-text">Context AI by Ab-Romia</h1>
-                        <p class="text-sm text-slate-400">Refactored for Clarity & Efficiency</p>
+                        <h1 class="text-xl sm:text-2xl font-bold gradient-text">Context AI by Ab-Romia</h1>
+                        <p class="text-xs sm:text-sm text-slate-400">Abdelrahman Abouroumia...</p>
                     </div>
+                </div>
+
+                <div id="api-status" class="flex items-center space-x-2 mt-2 sm:mt-0">
+                    <div id="api-status-icon" class="w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></div>
+                    <span id="api-status-text" class="text-sm text-slate-400">API Key Required</span>
                 </div>
             </header>
 
-            <div class="flex-1 flex overflow-hidden">
-                <div class="w-1/2 flex flex-col border-r border-slate-600/50">
-                    <div class="p-6 border-b border-slate-600/30">
-                        <h2 class="text-lg font-semibold text-slate-200">Knowledge Base</h2>
-                        <p class="text-sm text-slate-400 mt-1">Provide context for the AI to learn from.</p>
+            <!-- API Key Configuration Section (Collapsible) -->
+            <div id="api-key-section" class="p-4 sm:p-6 border-b border-slate-600/30 bg-slate-800/30">
+                <div id="toggle-api-section" class="flex items-center justify-between cursor-pointer">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-200">🔑 API Configuration</h3>
+                        <p class="text-sm text-slate-400">Enter your OpenRouter API key to use the assistant</p>
                     </div>
-                    <div class="flex-1 p-6 flex flex-col">
-                        <textarea id="context-input" class="w-full h-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition scroll-container" placeholder="Paste your documents, meeting notes, or any relevant context here..."></textarea>
+                    <button class="text-slate-400 hover:text-slate-200 transition-transform duration-300">
+                        <svg id="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="api-key-content" class="space-y-4 mt-4">
+                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                        <input
+                            type="password"
+                            id="api-key-input"
+                            placeholder="sk-or-your-openrouter-api-key-here"
+                            class="flex-1 bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                        >
+                        <div class="flex space-x-2">
+                            <button id="test-api-key" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                Test Key
+                            </button>
+                            <button id="save-api-key" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                Save
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-slate-400 space-y-1">
+                        <p>• Get your free API key from <a href="https://openrouter.ai/" target="_blank" class="text-indigo-400 hover:text-indigo-300">openrouter.ai</a></p>
+                        <p>• Your API key is stored locally in your browser and never sent to our servers</p>
+                    </div>
+
+                    <div id="api-key-status" class="hidden p-3 rounded-lg text-sm"></div>
+                </div>
+            </div>
+
+            <!-- Main Content Area: Stacks on mobile, side-by-side on desktop -->
+            <div class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
+                <!-- Left Panel: Knowledge Base -->
+                <div class="w-full lg:w-1/2 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-600/50">
+                    <!-- Mobile Header for Knowledge Base (Collapsible) -->
+                    <div id="kb-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
+                        <h2 class="text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
+                        <svg id="kb-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+
+                    <!-- Knowledge Base Content -->
+                    <div id="kb-content" class="flex-1 p-4 sm:p-6 flex flex-col lg:flex">
+                        <h2 class="hidden lg:block text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
+                        <p class="hidden lg:block text-sm text-slate-400 mt-1 mb-4">Provide context for the AI to learn from.</p>
+                        <div class="flex-1 flex flex-col">
+                           <textarea id="context-input" class="w-full flex-1 bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition scroll-container min-h-[250px] lg:min-h-0" placeholder="Paste your documents, meeting notes, or any relevant context here..."></textarea>
+                        </div>
                         <div class="mt-4 flex items-center justify-between">
                             <div class="text-xs text-slate-400">
                                 Chars: <span id="char-count">0</span> | Words: <span id="word-count">0</span>
@@ -92,35 +162,47 @@
                                 <button id="index-context-btn" class="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Index Context</button>
                             </div>
                         </div>
-                         <div class="mt-4">
-                                <label for="task-select" class="block text-sm font-medium text-slate-300 mb-2">Choose an Action:</label>
-                                <select id="task-select" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2 text-slate-200 focus:ring-2 focus:ring-indigo-500">
-                                    <option value="q_and_a">Question & Answer</option>
-                                    <option value="summarize">Summarize</option>
-                                    <option value="plan">Generate Action Plan</option>
-                                    <option value="creative">Creative Writing</option>
-                                </select>
-                            </div>
                     </div>
                 </div>
 
-                <div class="w-1/2 flex flex-col">
-                    <div class="p-6 border-b border-slate-600/30">
-                        <h2 class="text-lg font-semibold text-slate-200">AI Assistant</h2>
-                        <p class="text-sm text-slate-400 mt-1">Ask questions or select a task.</p>
+                <!-- Right Panel: AI Assistant -->
+                <div class="w-full lg:w-1/2 flex flex-col">
+                    <!-- Mobile Header for AI Assistant (Collapsible) -->
+                    <div id="assistant-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
+                        <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
+                        <svg id="assistant-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                     </div>
-                    <div id="chat-container" class="flex-1 overflow-y-auto scroll-container p-6 space-y-6">
+
+                    <!-- AI Assistant Content -->
+                    <div id="assistant-content" class="flex-1 flex flex-col lg:flex lg:overflow-hidden">
+                        <div class="hidden lg:block p-6 border-b border-slate-600/30">
+                            <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
+                            <p class="text-sm text-slate-400 mt-1">Ask questions or select a task.</p>
                         </div>
-                    <div class="p-6 border-t border-slate-600/30">
-                        <div class="relative">
-                            <textarea id="chat-input" rows="1" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-3 pr-12 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition" placeholder="Ask a question or provide a prompt..." style="max-height: 120px;"></textarea>
-                            <button id="send-button" class="absolute right-2.5 bottom-2.5 p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
-                            </button>
+                         <div class="p-4 sm:p-6 border-b border-slate-600/30">
+                            <label for="task-select" class="block text-sm font-medium text-slate-300 mb-2">Choose an Action:</label>
+                            <select id="task-select" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2 text-slate-200 focus:ring-2 focus:ring-indigo-500">
+                                <option value="q_and_a">Question & Answer</option>
+                                <option value="summarize">Summarize</option>
+                                <option value="plan">Generate Action Plan</option>
+                                <option value="creative">Creative Writing</option>
+                            </select>
                         </div>
-                        <div class="flex items-center justify-between mt-3 text-xs text-slate-400 h-5">
-                            <div id="status-indicator" class="hidden">
+                        <div id="chat-container" class="flex-1 overflow-y-auto scroll-container p-6 space-y-6 min-h-[300px] lg:min-h-0">
+                            <!-- Chat messages will be dynamically added here -->
+                        </div>
+                        <div class="p-4 sm:p-6 border-t border-slate-600/30">
+                            <div class="relative">
+                                <textarea id="chat-input" rows="1" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-3 pr-12 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition" placeholder="Ask a question or provide a prompt..." style="max-height: 120px;"></textarea>
+                                <button id="send-button" class="absolute right-2.5 bottom-2.5 p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between mt-3 text-xs text-slate-400 h-5">
+                                <div id="status-indicator" class="hidden">
+                                    <!-- Status messages appear here -->
                                 </div>
+                            </div>
                         </div>
                     </div>
                 </div>
