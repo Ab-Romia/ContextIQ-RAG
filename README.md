@@ -49,15 +49,14 @@ ContextIQ is built with a clear separation of concerns, featuring a Python backe
     ```bash
     pip install -r requirements.txt
     ```
+3. **API Configuration**
 
-3.  **Set up environment variables**
-    Create a `.env` file in the root directory and add your OpenRouter API key. This is a secure way to manage your credentials.
-
-    ```env
-    OPENROUTER_API_KEY="your_openrouter_api_key_here"
-    MODEL_NAME="deepseek/deepseek-r1-0528:free"
-    # Other optional configurations can go here
-    ```
+   This application doesn't require setting environment variables in a `.env` file. Instead:
+   
+   - When you run the application, you'll be prompted to enter your OpenRouter API key in the UI
+   - Get a free API key from [openrouter.ai](https://openrouter.ai)
+   - The API key is stored locally in your browser and sent with your requests
+   - You can test the API key's validity directly in the interface
 
 ### Usage
 
