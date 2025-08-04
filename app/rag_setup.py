@@ -2,7 +2,7 @@ import chromadb
 import logging
 import requests
 import json
-from app.config import settings
+from config import settings  # Fixed: removed 'app.' prefix
 import time
 import os
 import numpy as np
@@ -29,6 +29,7 @@ class TFIDFEmbeddingFunction:
         )
         self.is_fitted = False
         self.max_features = max_features
+
     def name(self):
         """Return a name identifier for this embedding function."""
         return "tfidf_embedder"
@@ -161,56 +162,272 @@ class OpenRouterLLM:
 
         logger.info("=" * 60)
 
-    def _make_api_request(self, prompt: str, max_tokens: int, system_prompt: str = "") -> dict:
-        """Helper to make the API call with the correct headers and payload."""
+    def _make_api_request(self, prompt: str, max_tokens: int = 2000, timeout: int = None) -> dict:
+        """Make a direct HTTP request to OpenRouter API with configurable token limits."""
+
+        # Calculate dynamic timeout based on max_tokens and prompt length
+        if timeout is None:
+            base_timeout = 120
+            # More tokens = longer generation time
+            token_timeout = max(20, max_tokens // 100)  # ~1 second per 100 tokens
+            prompt_timeout = max(10, len(prompt) // 1000)  # ~1 second per 2000 characters
+            timeout = min(base_timeout + token_timeout + prompt_timeout, 600)  # Cap at 5 minutes
+
+        logger.info(f"🌐 Making API request to OpenRouter")
+        logger.info(f"📏 Prompt length: {len(prompt)} characters")
+        logger.info(f"🎯 Max tokens: {max_tokens}")
+        logger.info(f"⏱️  Timeout: {timeout}s")
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://huggingface.co/spaces/google/contextiq-rag",  # Replace with your deployment URL
-            "X-Title": "ContextIQ RAG",  # Replace with your app name
+            "HTTP-Referer": "https://github.com/Ab-Romia/ContextIQ-RAG",
+            "X-Title": "Context Aware AI"
         }
 
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
+        # Optimize payload for longer responses
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "stream": False,
+            # Add parameters to encourage complete responses
+            "presence_penalty": 0.1,  # Slight penalty for repetition
+            "frequency_penalty": 0.1,  # Slight penalty for frequency
         }
 
-        logger.info(f"➡️ Sending request to {self.api_url} with prompt: {prompt[:50]}...")
+        # Log the request payload (without sensitive data)
+        safe_payload = payload.copy()
+        safe_payload["messages"] = [{"role": "user", "content": f"[CONTENT: {len(prompt)} chars]"}]
+        logger.info(f"📤 Request payload: {json.dumps(safe_payload, indent=2)}")
 
         try:
-            response = requests.post(self.api_url, headers=headers, data=json.dumps(payload), timeout=60)
-            response.raise_for_status()  # Raise an exception for bad status codes
-            response_json = response.json()
+            start_time = time.time()
 
-            logger.info(f"✅ Received response from LLM (status code: {response.status_code})")
-            return response_json
+            with requests.Session() as session:
+                response = session.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=timeout
+                )
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Error making API request: {e}")
+            request_time = time.time() - start_time
+
+            logger.info(f"⏱️  API request completed in {request_time:.2f}s")
+            logger.info(f"📊 Response status: {response.status_code}")
+
+            if response.status_code == 200:
+                response_data = response.json()
+                logger.info("✅ API request successful")
+
+                # Log response details
+                if "choices" in response_data and response_data["choices"]:
+                    content = response_data["choices"][0]["message"]["content"]
+                    logger.info(f"📝 Response content length: {len(content)} characters")
+
+                    # Check if response was truncated
+                    if "usage" in response_data:
+                        usage = response_data["usage"]
+                        completion_tokens = usage.get("completion_tokens", 0)
+                        logger.info(f"📊 Token usage: {usage}")
+
+                        if completion_tokens >= max_tokens * 0.95:  # If we used 95% of max tokens
+                            logger.warning(
+                                f"⚠️  Response may be truncated (used {completion_tokens}/{max_tokens} tokens)")
+
+                    content_preview = content[:300] + "..." if len(content) > 300 else content
+                    logger.info(f"📄 Response preview: {content_preview}")
+
+                return response_data
+            else:
+                logger.error(f"❌ API request failed with status {response.status_code}")
+                logger.error(f"📄 Response text: {response.text}")
+                return {"error": f"HTTP {response.status_code}: {response.text}"}
+
+        except requests.exceptions.Timeout:
+            logger.error(f"⏱️  API request timed out after {timeout}s")
+            return {"error": f"Request timed out after {timeout}s. Try reducing the context length or max tokens."}
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"🌐 Connection error: {e}")
+            return {"error": f"Connection error: {str(e)}"}
+        except Exception as e:
+            logger.error(f"❌ API request failed: {e}")
             return {"error": str(e)}
 
-    def generate_response(self, prompt: str, max_tokens: int) -> str:
-        """Generates a response from the LLM."""
+    def generate_content(self, prompt: str, max_tokens: int = 2000) -> str:
+        """Generate content with configurable token limits."""
+        logger.info("=" * 80)
+        logger.info("🧠 LLM CONTENT GENERATION STARTED")
+        logger.info("=" * 80)
+        logger.info(f"📏 Input prompt length: {len(prompt)} characters")
+        logger.info(f"🎯 Requested max tokens: {max_tokens}")
+        logger.info(f"🔧 Client status: {'Ready' if self.client_ready else 'Not ready'}")
+        logger.info(f"🔑 API key status: {'Present' if self.api_key else 'Missing'}")
+
+        # Dynamic prompt optimization based on max_tokens
+        original_length = len(prompt)
+        max_prompt_length = 12000 if max_tokens > 3000 else 8000  # Allow longer prompts for longer responses
+
+        if len(prompt) > max_prompt_length:
+            logger.warning(f"⚠️  Prompt is quite long ({original_length} chars), truncating for better performance")
+            # Intelligent truncation that preserves structure
+            if "Context:" in prompt and "Question:" in prompt:
+                parts = prompt.split("Question:")
+                if len(parts) == 2:
+                    context_part = parts[0]
+                    question_part = "Question:" + parts[1]
+
+                    # Keep the question and instructions, truncate context if needed
+                    available_for_context = max_prompt_length - len(question_part) - 500  # Reserve space
+                    if len(context_part) > available_for_context:
+                        context_part = context_part[
+                                       :available_for_context] + "\n\n[... content truncated for performance ...]"
+
+                    prompt = context_part + question_part
+                    logger.info(f"📏 Prompt intelligently truncated from {original_length} to {len(prompt)} characters")
+            else:
+                prompt = prompt[:max_prompt_length] + "\n\n[... content truncated for performance ...]"
+                logger.info(f"📏 Prompt truncated from {original_length} to {len(prompt)} characters")
+
+        # Log prompt preview
+        prompt_preview = prompt[:400] + "..." if len(prompt) > 400 else prompt
+        logger.info(f"📝 PROMPT PREVIEW:")
+        logger.info(f"   {prompt_preview}")
+        logger.info("-" * 60)
+
+        # Check API key first
+        if not self.api_key or not self.api_key.strip():
+            error_msg = "❌ OpenRouter API key is not configured. Please set the OPENROUTER_API_KEY environment variable."
+            logger.error(error_msg)
+            return error_msg
+
+        # Check client readiness
         if not self.client_ready:
-            logger.error("❌ LLM client is not ready. Cannot generate response.")
-            return "Error: LLM client is not ready. Please check the API key."
+            error_msg = "❌ OpenRouter client is not ready. Please check your API key and connection."
+            logger.error(error_msg)
+            return error_msg
 
-        response_json = self._make_api_request(prompt, max_tokens)
+        max_retries = 3
+        retry_count = 0
+        base_wait_time = 2
 
-        if "error" in response_json:
-            error_msg = response_json["error"]
-            logger.error(f"❌ LLM API Error: {error_msg}")
-            return f"Error from LLM API: {error_msg}"
+        while retry_count <= max_retries:
+            try:
+                logger.info(f"🔄 API call attempt {retry_count + 1}/{max_retries + 1}")
 
-        try:
-            generated_text = response_json["choices"][0]["message"]["content"]
-            return generated_text
-        except (KeyError, IndexError, TypeError) as e:
-            logger.error(f"❌ Unexpected response format from LLM: {e}")
-            return f"Error: Unexpected response format from LLM. Raw response: {response_json}"
+                # Adjust parameters based on retry attempt
+                current_max_tokens = max_tokens
+                timeout = None  # Let _make_api_request calculate dynamic timeout
+
+                if retry_count > 0:
+                    # Reduce max_tokens on retries for faster responses
+                    current_max_tokens = max(1000, max_tokens - (retry_count * 500))
+                    logger.info(f"🔧 Retry attempt - reducing max_tokens to {current_max_tokens}")
+
+                response = self._make_api_request(prompt, max_tokens=current_max_tokens, timeout=timeout)
+
+                if "error" in response:
+                    error_msg = response["error"]
+
+                    # Handle specific error types
+                    if "timeout" in error_msg.lower() or "408" in error_msg:
+                        logger.warning(f"⏱️  Timeout error on attempt {retry_count + 1}")
+                        if retry_count < max_retries:
+                            continue
+                    elif "429" in error_msg:
+                        logger.warning(f"🚦 Rate limit error on attempt {retry_count + 1}")
+                        wait_time = base_wait_time * (2 ** retry_count)
+                        logger.info(f"⏳ Waiting {wait_time}s for rate limit cooldown...")
+                        time.sleep(wait_time)
+                        retry_count += 1
+                        continue
+                    elif "401" in error_msg or "403" in error_msg:
+                        logger.error(f"🔑 Authentication error: {error_msg}")
+                        return f"❌ Authentication error: {error_msg}"
+
+                    raise Exception(error_msg)
+
+                if "choices" in response and len(response["choices"]) > 0:
+                    content = response["choices"][0]["message"]["content"]
+                    if content:
+                        logger.info(f"✅ Successfully generated response")
+                        logger.info(f"📏 Response length: {len(content)} characters")
+
+                        # Check if response seems complete
+                        if "usage" in response:
+                            usage = response["usage"]
+                            completion_tokens = usage.get("completion_tokens", 0)
+                            if completion_tokens >= current_max_tokens * 0.95:
+                                logger.warning(
+                                    f"⚠️  Response may be incomplete (used {completion_tokens}/{current_max_tokens} tokens)")
+                                content += "\n\n[Note: Response may be truncated due to token limits. Consider asking for specific parts if needed.]"
+
+                        response_preview = content[:400] + "..." if len(content) > 400 else content
+                        logger.info(f"📤 RESPONSE PREVIEW:")
+                        logger.info(f"   {response_preview}")
+                        logger.info("=" * 80)
+
+                        return content
+                    else:
+                        logger.error("❌ Received empty response from AI model")
+                        if retry_count < max_retries:
+                            retry_count += 1
+                            continue
+                        return "❌ Received empty response from AI model."
+                else:
+                    logger.error("❌ Invalid response format from AI model")
+                    logger.error(f"📄 Response structure: {list(response.keys())}")
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        continue
+                    return "❌ Invalid response format from AI model."
+
+            except Exception as e:
+                error_type = type(e).__name__
+                error_msg = str(e)
+
+                logger.error(f"❌ API call failed (attempt {retry_count + 1}): {error_type}: {error_msg}")
+
+                retry_count += 1
+                if retry_count > max_retries:
+                    final_error = f"❌ Error: Failed to get response from AI model after {max_retries + 1} attempts. Final error: {error_msg}"
+                    logger.error(final_error)
+                    logger.info("=" * 80)
+                    return final_error
+
+                wait_time = base_wait_time * retry_count + (retry_count * 0.5)
+                logger.info(f"⏳ Waiting {wait_time:.1f}s before retry...")
+                time.sleep(wait_time)
+
+
+# Initialize the generation model
+logger.info("🚀 Creating OpenRouter LLM instance...")
+try:
+    generation_model = OpenRouterLLM(
+        api_key=settings.OPENROUTER_API_KEY,
+        base_url=settings.OPENROUTER_URL,
+        model=settings.MODEL_NAME
+    )
+
+    if generation_model.client_ready:
+        logger.info("✅ RAG setup completed successfully - OpenRouter client is ready")
+    else:
+        logger.error("❌ RAG setup completed but OpenRouter client is not ready")
+
+except Exception as e:
+    logger.error(f"❌ Error creating OpenRouter LLM: {e}")
+
+
+    # Create a dummy model for graceful degradation
+    class DummyLLM:
+        def generate_content(self, prompt: str) -> str:
+            return f"❌ AI model is not available. Initialization error: {str(e)}"
+
+
+    generation_model = DummyLLM()
+    logger.warning("⚠️  Using dummy LLM due to initialization failure")
+
+logger.info("🎉 RAG setup initialization complete")

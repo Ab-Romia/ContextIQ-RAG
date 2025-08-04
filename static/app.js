@@ -25,6 +25,10 @@ class ContextAwareApp {
             apiKeyContent: document.getElementById('api-key-content'),
             toggleIcon: document.getElementById('toggle-icon'),
 
+            // File Input elements
+            fileInput: document.getElementById('file-input'),
+            fileName: document.getElementById('file-name'),
+
             // Responsive collapsible section elements
             kbHeader: document.getElementById('kb-header'),
             kbContent: document.getElementById('kb-content'),
@@ -64,7 +68,7 @@ class ContextAwareApp {
             "👋 **Welcome to ContextIQ!**\n\n" +
             "To get started:\n" +
             "1. **Enter your OpenRouter API key** in the configuration section above.\n" +
-            "2. **Add your context** in the Knowledge Base on the left.\n" +
+            "2. **Add your context** by uploading a file or pasting text in the Knowledge Base.\n" +
             "3. **Index the context** and start asking questions!\n\n" +
             "🆓 You can get a free API key from [openrouter.ai](https://openrouter.ai) - no credit card required!",
             'system'
@@ -89,10 +93,19 @@ class ContextAwareApp {
             }
         });
         this.elements.contextInput.addEventListener('input', () => {
+            // If user types in textarea, clear the file input as text takes precedence
+            if (this.elements.fileInput.value) {
+                this.elements.fileInput.value = '';
+                this.elements.fileName.textContent = 'Choose a file...';
+            }
             this.updateContextStats();
             this.updateUI();
         });
         this.elements.chatInput.addEventListener('input', () => this.autoResizeTextarea(this.elements.chatInput));
+
+        // File input listener
+        this.elements.fileInput.addEventListener('change', () => this.handleFileSelection());
+
 
         // API Key listeners
         this.elements.testApiKeyBtn.addEventListener('click', (e) => {
@@ -124,17 +137,31 @@ class ContextAwareApp {
     }
 
     /**
+     * Handles file selection, updates UI, and clears textarea.
+     */
+    handleFileSelection() {
+        const file = this.elements.fileInput.files[0];
+        if (file) {
+            this.elements.fileName.textContent = file.name;
+            // Clear textarea and its stats when a file is selected to indicate file is the source
+            this.elements.contextInput.value = '';
+            this.updateContextStats();
+            this.updateUI();
+        } else {
+            this.elements.fileName.textContent = 'Choose a file...';
+        }
+    }
+
+
+    /**
      * Sets up the initial state of collapsible sections based on screen size.
      */
     setupResponsiveUI() {
         const isMobile = window.innerWidth < 1024;
 
-        // On mobile, collapse the knowledge base by default to show the chat first.
-        // On desktop, ensure everything is expanded.
         this.state.kbSectionCollapsed = isMobile;
-        this.state.assistantSectionCollapsed = false; // Always show assistant on load
+        this.state.assistantSectionCollapsed = false;
 
-        // Hide API section by default if a valid key is already loaded
         if (this.state.apiKeyValidated) {
             this.state.apiSectionCollapsed = true;
         }
@@ -146,7 +173,6 @@ class ContextAwareApp {
 
     /**
      * Toggles a specific collapsible section.
-     * @param {'api' | 'kb' | 'assistant'} sectionName - The name of the section to toggle.
      */
     toggleSection(sectionName) {
         const stateKey = `${sectionName}SectionCollapsed`;
@@ -155,8 +181,7 @@ class ContextAwareApp {
     }
 
     /**
-     * Updates the visibility of a collapsible section based on its state.
-     * @param {'api' | 'kb' | 'assistant'} sectionName - The name of the section to update.
+     * Updates the visibility of a collapsible section.
      */
     updateSectionVisibility(sectionName) {
         const contentEl = this.elements[`${sectionName}Content`];
@@ -183,7 +208,6 @@ class ContextAwareApp {
             if (storedKey) {
                 this.elements.apiKeyInput.value = storedKey;
                 this.state.userApiKey = storedKey;
-                // Don't auto-test on load, just update the UI
                 this.onApiKeyInputChange();
             }
         } catch (error) {
@@ -197,7 +221,6 @@ class ContextAwareApp {
     onApiKeyInputChange() {
         const apiKey = this.elements.apiKeyInput.value.trim();
 
-        // Reset validation state when input changes
         this.state.apiKeyValidated = false;
         this.state.userApiKey = '';
 
@@ -229,12 +252,10 @@ class ContextAwareApp {
         }
 
         try {
-            // Create an AbortController for timeout handling
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-            // CHANGE: Updated the endpoint to match the backend: /api/v1/test_api_key
-            const response = await fetch('/api/v1/test_api_key', {
+            const response = await fetch('/api/v1/test-api-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: apiKey }),
@@ -242,13 +263,8 @@ class ContextAwareApp {
             });
 
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Server error (${response.status}): ${errorText}`);
-            }
-
             const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || `Server error (${response.status})`);
 
             if (result.valid) {
                 this.state.apiKeyValidated = true;
@@ -263,26 +279,16 @@ class ContextAwareApp {
                 this.state.apiKeyValidated = false;
                 this.state.userApiKey = '';
                 this.updateApiKeyStatus('error', result.message || 'API key is invalid');
-                if (!silent) {
-                    this.addMessageToChat(`❌ **API Key Invalid**: ${result.message || 'Unknown error'}`, 'system');
-                }
+                if (!silent) this.addMessageToChat(`❌ **API Key Invalid**: ${result.message || 'Unknown error'}`, 'system');
             }
         } catch (error) {
             console.error('API key test error:', error);
             this.state.apiKeyValidated = false;
             this.state.userApiKey = '';
 
-            let errorMessage = 'Error testing API key';
-            if (error.name === 'AbortError') {
-                errorMessage = 'Request timed out. Please check your connection and try again.';
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-
+            let errorMessage = (error.name === 'AbortError') ? 'Request timed out.' : error.message;
             this.updateApiKeyStatus('error', errorMessage);
-            if (!silent) {
-                this.addMessageToChat(`❌ **Connection Error**: ${errorMessage}`, 'system');
-            }
+            if (!silent) this.addMessageToChat(`❌ **Connection Error**: ${errorMessage}`, 'system');
         } finally {
             this.state.isTestingApiKey = false;
             this.updateUI();
@@ -315,26 +321,16 @@ class ContextAwareApp {
         const statusEl = this.elements.apiStatusText;
         const iconEl = this.elements.apiStatusIcon;
 
-        switch (status) {
-            case 'testing':
-                iconEl.className = 'w-3 h-3 bg-blue-500 rounded-full animate-pulse flex-shrink-0';
-                statusEl.textContent = 'Testing...';
-                break;
-            case 'success':
-                iconEl.className = 'w-3 h-3 bg-green-500 rounded-full flex-shrink-0';
-                statusEl.textContent = 'API Key Valid';
-                break;
-            case 'error':
-                iconEl.className = 'w-3 h-3 bg-red-500 rounded-full flex-shrink-0';
-                statusEl.textContent = 'API Key Invalid';
-                break;
-            case 'pending':
-                iconEl.className = 'w-3 h-3 bg-yellow-500 rounded-full flex-shrink-0';
-                statusEl.textContent = 'API Key Pending';
-                break;
-        }
+        const statusConfig = {
+            testing: { icon: 'bg-blue-500 animate-pulse', text: 'Testing...' },
+            success: { icon: 'bg-green-500', text: 'API Key Valid' },
+            error:   { icon: 'bg-red-500', text: 'API Key Invalid' },
+            pending: { icon: 'bg-yellow-500', text: 'API Key Pending' },
+        };
 
-        // Also update the detailed status message box
+        iconEl.className = `w-3 h-3 ${statusConfig[status].icon} rounded-full flex-shrink-0`;
+        statusEl.textContent = statusConfig[status].text;
+
         const detailedStatusEl = this.elements.apiKeyStatus;
         if (detailedStatusEl) {
             detailedStatusEl.textContent = message;
@@ -352,7 +348,7 @@ class ContextAwareApp {
     }
 
     /**
-     * Main handler for the send button. Directs to the correct function based on the selected task.
+     * Main handler for the send button.
      */
     handleSubmit() {
         if (!this.state.apiKeyValidated) {
@@ -372,62 +368,77 @@ class ContextAwareApp {
     }
 
     /**
-     * Handles the logic for indexing the provided context.
+     * ✨ REFACTORED: Unified logic for indexing from file or text.
      */
     async handleIndexContext() {
+        if (this.state.isIndexing) return; // Prevent double-clicks
+
         if (!this.state.apiKeyValidated) {
             this.addMessageToChat("🔑 **API Key Required**: Please validate your API key before indexing.", 'system');
             return;
         }
 
-        const context = this.elements.contextInput.value.trim();
-        if (context.length < 20) {
-            this.showStatus('Context is too short. Please provide at least 20 characters.', 'error');
+        const file = this.elements.fileInput.files[0];
+        const textContext = this.elements.contextInput.value.trim();
+
+        if (!file && textContext.length < 20) {
+            this.showStatus('Context is too short. Please provide at least 20 characters or upload a file.', 'error');
             return;
         }
 
         this.state.isIndexing = true;
         this.updateUI();
-        this.showStatus('Indexing context... This may take a moment.', 'loading');
+        this.showStatus(file ? `Uploading and indexing ${file.name}...` : 'Indexing text...', 'loading');
 
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for indexing
-
-            const response = await fetch('/api/v1/index', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': this.state.userApiKey
-                },
-                body: JSON.stringify({ context }),
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Server error (${response.status}): ${errorText}`);
+            let response;
+            if (file) {
+                // Handle file upload
+                const formData = new FormData();
+                formData.append('file', file);
+                this.showStatus('Sending file to backend...', 'loading');
+                response = await fetch('/api/v1/index-file', {
+                    method: 'POST',
+                    headers: { 'X-API-Key': this.state.userApiKey },
+                    body: formData,
+                });
+            } else {
+                // Handle text input
+                this.showStatus('Sending text to backend...', 'loading');
+                response = await fetch('/api/v1/index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': this.state.userApiKey
+                    },
+                    body: JSON.stringify({ context: textContext }),
+                });
             }
 
             const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.detail || 'An unknown error occurred during indexing.');
+            }
+
             this.state.isIndexed = true;
-            // CHANGE: Updated expected response field from documents_added to chunks_added
-            this.showStatus(`Successfully indexed ${result.chunks_added || '1'} document chunks.`, 'success');
+            this.showStatus(result.message || 'Successfully indexed context.', 'success');
+
+            // NEW: Populate textarea with extracted text if available
+            if (result.extracted_text) {
+                this.elements.contextInput.value = result.extracted_text;
+                this.updateContextStats();
+            }
+
         } catch (error) {
             console.error('Indexing error:', error);
-            let errorMessage = 'Error indexing context';
-            if (error.name === 'AbortError') {
-                errorMessage = 'Indexing timed out. Please try with smaller content or check your connection.';
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-            this.showStatus(errorMessage, 'error');
+            this.showStatus(`Error: ${error.message}`, 'error');
             this.state.isIndexed = false;
         } finally {
             this.state.isIndexing = false;
             this.updateUI();
+            // Clear the file input after processing to prevent accidental re-uploads
+            this.elements.fileInput.value = '';
+            this.elements.fileName.textContent = 'Choose a file...';
         }
     }
 
@@ -453,10 +464,9 @@ class ContextAwareApp {
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-            // CHANGE: Updated the endpoint to match the backend: /api/v1/chat
-            const response = await fetch('/api/v1/chat', {
+            const response = await fetch('/api/v1/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -467,21 +477,14 @@ class ContextAwareApp {
             });
 
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorBody = await response.json().catch(() => ({ detail: 'Unknown error occurred' }));
-                throw new Error(errorBody.detail || 'An unknown error occurred.');
-            }
-
             const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || 'An unknown error occurred.');
+
             this.addMessageToChat(result.response, 'ai');
             this.showStatus('Ready for your next question.', 'success');
         } catch (error) {
             console.error('Generation error:', error);
-            let errorMessage = error.message;
-            if (error.name === 'AbortError') {
-                errorMessage = 'Request timed out. Please try again.';
-            }
+            const errorMessage = (error.name === 'AbortError') ? 'Request timed out. Please try again.' : error.message;
             this.addMessageToChat(`An error occurred: ${errorMessage}`, 'system');
             this.showStatus(`Error: ${errorMessage}`, 'error');
         } finally {
@@ -504,9 +507,7 @@ class ContextAwareApp {
         }
 
         let userMessage = `Task: ${task_type.charAt(0).toUpperCase() + task_type.slice(1)}`;
-        if (prompt) {
-            userMessage += `\nPrompt: ${prompt}`;
-        }
+        if (prompt) userMessage += `\nPrompt: ${prompt}`;
         this.addMessageToChat(userMessage, 'user');
 
         this.elements.chatInput.value = '';
@@ -518,36 +519,27 @@ class ContextAwareApp {
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000); // 60 second timeout
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-            // CHANGE: Updated the JSON body to match the new `TaskRequest` schema
-            // which only expects `task_name`. The backend handles the rest.
             const response = await fetch('/api/v1/task', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': this.state.userApiKey
                 },
-                body: JSON.stringify({ task_name: task_type }),
+                body: JSON.stringify({ context, task_type, prompt }),
                 signal: controller.signal
             });
 
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorBody = await response.json().catch(() => ({ detail: 'Unknown error occurred' }));
-                throw new Error(errorBody.detail || 'An unknown error occurred.');
-            }
-
             const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || 'An unknown error occurred.');
+
             this.addMessageToChat(result.result, 'ai');
             this.showStatus('Task completed successfully.', 'success');
         } catch (error) {
             console.error('Task execution error:', error);
-            let errorMessage = error.message;
-            if (error.name === 'AbortError') {
-                errorMessage = 'Task timed out. Please try again.';
-            }
+            const errorMessage = (error.name === 'AbortError') ? 'Task timed out. Please try again.' : error.message;
             this.addMessageToChat(`An error occurred: ${errorMessage}`, 'system');
             this.showStatus(`Error: ${errorMessage}`, 'error');
         } finally {
@@ -561,9 +553,11 @@ class ContextAwareApp {
      */
     async handleClearContext() {
         this.elements.contextInput.value = '';
+        this.elements.fileInput.value = ''; // Also clear the file input
+        this.elements.fileName.textContent = 'Choose a file...';
         this.updateContextStats();
         this.state.isIndexed = false;
-        this.updateUI();
+
         this.showStatus('Clearing knowledge base...', 'loading');
 
         try {
@@ -575,6 +569,8 @@ class ContextAwareApp {
         } catch (error) {
             console.error('Clear index error:', error);
             this.showStatus(`Error clearing index: ${error.message}`, 'error');
+        } finally {
+            this.updateUI();
         }
     }
 
@@ -582,7 +578,10 @@ class ContextAwareApp {
      * Updates all UI elements based on the current application state.
      */
     updateUI() {
-        const hasContext = this.elements.contextInput.value.trim().length > 10;
+        const hasTextContext = this.elements.contextInput.value.trim().length > 10;
+        const hasFileContext = this.elements.fileInput.files.length > 0;
+        const hasContext = hasTextContext || hasFileContext;
+
         const isQandA = this.elements.taskSelect.value === 'q_and_a';
         const hasValidApiKey = this.state.apiKeyValidated;
         const isBusy = this.state.isIndexing || this.state.isGenerating || this.state.isTestingApiKey;
@@ -591,13 +590,7 @@ class ContextAwareApp {
         const apiKeyEntered = this.elements.apiKeyInput.value.trim().length > 0;
         this.elements.testApiKeyBtn.disabled = this.state.isTestingApiKey || !apiKeyEntered;
         this.elements.saveApiKeyBtn.disabled = isBusy || !this.state.apiKeyValidated;
-
-        // Update button text based on state
-        if (this.state.isTestingApiKey) {
-            this.elements.testApiKeyBtn.textContent = 'Testing...';
-        } else {
-            this.elements.testApiKeyBtn.textContent = 'Test Key';
-        }
+        this.elements.testApiKeyBtn.textContent = this.state.isTestingApiKey ? 'Testing...' : 'Test Key';
 
         // Update context and chat related buttons
         this.elements.indexContextBtn.disabled = isBusy || !hasContext || !hasValidApiKey;
@@ -605,24 +598,15 @@ class ContextAwareApp {
         if (isQandA) {
             this.elements.sendButton.disabled = isBusy || !this.state.isIndexed || !hasValidApiKey;
         } else {
-            this.elements.sendButton.disabled = isBusy || !hasContext || !hasValidApiKey;
+            // For other tasks, context comes from the text area, not the index
+            this.elements.sendButton.disabled = isBusy || !hasTextContext || !hasValidApiKey;
         }
 
-        // Update visual states
-        const buttonStates = [
-            this.elements.testApiKeyBtn,
-            this.elements.saveApiKeyBtn,
-            this.elements.indexContextBtn,
-            this.elements.sendButton
-        ];
-
-        buttonStates.forEach(button => {
-            if (button && button.disabled) {
-                button.style.opacity = '0.5';
-                button.style.cursor = 'not-allowed';
-            } else if (button) {
-                button.style.opacity = '1';
-                button.style.cursor = 'pointer';
+        // Update visual states for all buttons
+        [this.elements.testApiKeyBtn, this.elements.saveApiKeyBtn, this.elements.indexContextBtn, this.elements.sendButton].forEach(button => {
+            if (button) {
+                button.style.opacity = button.disabled ? '0.5' : '1';
+                button.style.cursor = button.disabled ? 'not-allowed' : 'pointer';
             }
         });
     }
@@ -636,10 +620,12 @@ class ContextAwareApp {
         let colorClass = 'text-slate-400';
         if (type === 'success') colorClass = 'text-green-400';
         if (type === 'error') colorClass = 'text-red-400';
+        if (type === 'loading') colorClass = 'text-blue-400 animate-pulse';
 
         indicator.innerHTML = `<span class="${colorClass}">${message}</span>`;
 
         if (type !== 'loading') {
+            indicator.querySelector('span').classList.remove('animate-pulse');
             setTimeout(() => indicator.classList.add('hidden'), 5000);
         }
     }
