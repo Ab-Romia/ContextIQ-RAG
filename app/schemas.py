@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-
 class DocumentRequest(BaseModel):
     """
     Schema for the request to index a new document.
@@ -11,7 +10,6 @@ class DocumentRequest(BaseModel):
         min_length=10,
         description="The full document or text to be indexed."
     )
-
 
 class ChatRequest(BaseModel):
     """
@@ -23,70 +21,55 @@ class ChatRequest(BaseModel):
         description="The user's question to be answered based on the indexed context."
     )
 
-
 class TaskRequest(BaseModel):
     """
-    Schema for executing a specific task like summarization.
+    Schema for executing a specific task like summarization or planning.
     """
-    task_name: str = Field(
+    context: str = Field(..., description="The full context for the task.")
+    task_type: str = Field(..., description="The type of task to perform (e.g., 'summarize', 'plan').")
+    prompt: Optional[str] = Field(None, description="An optional prompt to guide the task.")
+
+class ApiKeyRequest(BaseModel):
+    """
+    Schema for API key testing.
+    """
+    api_key: str = Field(
         ...,
-        description="The name of the task to perform, e.g., 'summarize'."
+        min_length=10,
+        description="The OpenRouter API key to test."
     )
 
+class ChatResponse(BaseModel):
+    """
+    Schema for the AI's response.
+    """
+    response: str
+
+class TaskResponse(BaseModel):
+    """
+    Schema for the result of a task.
+    """
+    result: str
 
 class IndexResponse(BaseModel):
     """
     Schema for the response after indexing a document.
     """
-    message: str = Field(
-        ...,
-        description="A confirmation message."
-    )
-    chunks_added: int = Field(
-        ...,
-        description="The number of document chunks added to the index."
-    )
+    message: str
+    documents_added: int
+    # ✨ ADDED: Field to return extracted text to the UI
+    extracted_text: Optional[str] = None
 
-
-class ChatResponse(BaseModel):
+class GeneralResponse(BaseModel):
     """
-    Schema for the response from a chat query.
+    A generic response model for simple status messages.
     """
-    response: str = Field(
-        ...,
-        description="The generated response from the AI."
-    )
-
-
-class TaskResponse(BaseModel):
-    """
-    Schema for the response from a task execution.
-    """
-    task_name: str = Field(
-        ...,
-        description="The name of the task that was performed."
-    )
-    result: str = Field(
-        ...,
-        description="The result of the task execution."
-    )
-
-
-class ApiKeyRequest(BaseModel):
-    """
-    Schema for the request to test an API key.
-    """
-    api_key: str = Field(
-        ...,
-        min_length=1,
-        description="The OpenRouter API key to test."
-    )
-
+    message: str
 
 class ApiKeyTestResponse(BaseModel):
     """
-    Schema for the response from the API key test endpoint.
+    Schema for API key test response.
     """
     valid: bool
     message: str
-    model_info: Optional[dict]
+    model_info: Optional[dict] = None

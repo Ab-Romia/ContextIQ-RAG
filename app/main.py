@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Header, Depends
+from fastapi import FastAPI, Request, HTTPException, Header, File, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,7 +19,7 @@ else:  # Local environment
 app = FastAPI(
     title="ContextIQ RAG - Intelligent Context-Aware Assistant",
     description="A sophisticated RAG-powered backend using FastAPI and OpenRouter.",
-    version="2.0.0"
+    version="2.2.0"  # Version updated for new feature
 )
 
 # Mount static files and templates
@@ -28,7 +28,7 @@ templates = Jinja2Templates(directory=BASE_DIR.parent / "templates")
 
 
 def get_api_key(x_api_key: Optional[str] = Header(None)) -> str:
-    """Extract API key from header or use a server default."""
+    """Extract API key from header or use default."""
     if x_api_key and x_api_key.strip():
         return x_api_key.strip()
 
@@ -50,74 +50,129 @@ async def debug_config():
         "api_key_length": len(config.settings.OPENROUTER_API_KEY) if config.settings.OPENROUTER_API_KEY else 0,
         "model_name": config.settings.MODEL_NAME,
         "server_has_fallback_key": bool(config.settings.OPENROUTER_API_KEY),
-        "require_user_api_key": config.settings.REQUIRE_USER_API_KEY
+        "accepts_user_keys": True
     }
 
 
-@app.post("/api/v1/index", response_model=schemas.IndexResponse)
-async def index_context(document_request: schemas.DocumentRequest, api_key: str = Depends(get_api_key)):
+@app.post("/api/v1/test-api-key", response_model=schemas.ApiKeyTestResponse)
+async def test_api_key_endpoint(api_key_request: schemas.ApiKeyRequest):
     """
-    Receives text, chunks the new text, and stores its embeddings in the vector DB.
+    Test if the provided API key is valid.
     """
     try:
-        docs_added = services.index_document(document_request, api_key)
-        return schemas.IndexResponse(
-            message=f"Successfully indexed {docs_added} document chunks.",
-            chunks_added=docs_added
-        )
+        result = await services.test_api_key(api_key_request.api_key)
+        return schemas.ApiKeyTestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v1/chat", response_model=schemas.ChatResponse)
-async def chat_with_context(chat_request: schemas.ChatRequest, api_key: str = Depends(get_api_key)):
+@app.post("/api/v1/task", response_model=schemas.TaskResponse)
+async def execute_task(
+        task_request: schemas.TaskRequest,
+        x_api_key: Optional[str] = Header(None)
+):
     """
-    Retrieves context from the vector DB and generates a response.
-    """
-    try:
-        response_text = await services.get_rag_response(chat_request, api_key)
-        return schemas.ChatResponse(response=response_text)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/task")
-async def perform_task(task_request: schemas.TaskRequest, api_key: str = Depends(get_api_key)):
-    """
-    Performs a specific task on the indexed documents (e.g., summarization).
+    Executes a specific task (e.g., summarize, plan) based on the provided context
+    using the provided or default API key.
     """
     try:
-        response = await services.perform_task_on_documents(task_request, api_key)
-        return response
-    except HTTPException as e:
-        raise e
+        api_key = get_api_key(x_api_key)
+        result = await services.execute_task(task_request, api_key)
+        return schemas.TaskResponse(result=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_frontend(request: Request):
+async def read_root(request: Request):
     """
-    Serves the main HTML page for the frontend.
+    Serves the main index.html page from the templates directory.
     """
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/api/v1/clear-index", response_model=schemas.IndexResponse)
-async def clear_index():
-    """
-    Clears all indexed documents from the vector database.
-    """
-    services.clear_index()
-    return schemas.IndexResponse(message="Successfully cleared all documents from the index.", chunks_added=0)
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Hugging Face."""
+    return {"status": "healthy", "message": "ContextIQ RAG is running!"}
 
 
-@app.post("/api/v1/test_api_key", response_model=schemas.ApiKeyTestResponse)
-async def test_api_key_endpoint(request: schemas.ApiKeyRequest):
+@app.post("/api/v1/generate", response_model=schemas.ChatResponse)
+async def generate_response(
+        chat_request: schemas.ChatRequest,
+        x_api_key: Optional[str] = Header(None)
+):
     """
-    Tests an OpenRouter API key provided by the user.
+    Receives a prompt, retrieves relevant context from the vector DB,
+    and returns an AI-generated response using the provided or default API key.
     """
-    response = await services.test_api_key(request.api_key)
-    return schemas.ApiKeyTestResponse(**response)
+    try:
+        api_key = get_api_key(x_api_key)
+        ai_message = await services.get_rag_response(chat_request, api_key)
+        return schemas.ChatResponse(response=ai_message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/clear_index", response_model=schemas.GeneralResponse)
+async def clear_context_index(x_api_key: Optional[str] = Header(None)):
+    """
+    Clears all data from the vector database index.
+    """
+    try:
+        services.clear_index()
+        return schemas.GeneralResponse(message="Knowledge base has been successfully cleared.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear index: {e}")
+
+
+@app.post("/api/v1/index", response_model=schemas.IndexResponse)
+async def index_context(
+        document_request: schemas.DocumentRequest,
+        x_api_key: Optional[str] = Header(None)
+):
+    """
+    Receives text, clears the old index, chunks the new text,
+    and stores its embeddings in the vector DB.
+    """
+    try:
+        # Validate API key access (but indexing doesn't require API calls)
+        get_api_key(x_api_key)
+
+        docs_added = services.index_document(document_request)
+        return schemas.IndexResponse(
+            message="Context has been successfully indexed.",
+            documents_added=docs_added,
+            extracted_text=document_request.context  # Return the provided text
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to index document: {e}")
+
+
+# ✨ UPDATED: File Upload Endpoint now returns the extracted text
+@app.post("/api/v1/index-file", response_model=schemas.IndexResponse)
+async def index_file(
+        x_api_key: Optional[str] = Header(None),
+        file: UploadFile = File(...)
+):
+    """
+    Receives a file (.txt, .pdf), extracts text, and indexes it.
+    """
+    try:
+        # API key validation is still important
+        get_api_key(x_api_key)
+
+        # The service layer will handle the file processing
+        docs_added, extracted_text = await services.process_and_index_file(file)
+
+        return schemas.IndexResponse(
+            message=f"Successfully indexed content from file: {file.filename}",
+            documents_added=docs_added,
+            extracted_text=extracted_text
+        )
+    except HTTPException as e:
+        # Re-raise HTTP exceptions to return proper status codes
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+

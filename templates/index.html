@@ -67,17 +67,14 @@
     </style>
 </head>
 <body class="font-inter text-white">
-    <!-- Background decorative elements -->
     <div class="fixed inset-0 -z-10">
         <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
         <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow animation-delay-2000"></div>
     </div>
 
-    <!-- Main container for the entire application -->
     <div class="relative z-10 flex items-center justify-center min-h-screen p-2 sm:p-4">
         <div class="w-full max-w-7xl min-h-[95vh] glass-effect rounded-3xl shadow-2xl flex flex-col">
 
-            <!-- Header Section -->
             <header class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-600/50 flex-wrap">
                 <div class="flex items-center space-x-4">
                     <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -95,7 +92,6 @@
                 </div>
             </header>
 
-            <!-- API Key Configuration Section (Collapsible) -->
             <div id="api-key-section" class="p-4 sm:p-6 border-b border-slate-600/30 bg-slate-800/30">
                 <div id="toggle-api-section" class="flex items-center justify-between cursor-pointer">
                     <div>
@@ -136,22 +132,38 @@
                 </div>
             </div>
 
-            <!-- Main Content Area: Stacks on mobile, side-by-side on desktop -->
             <div class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
-                <!-- Left Panel: Knowledge Base -->
                 <div class="w-full lg:w-1/2 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-600/50">
-                    <!-- Mobile Header for Knowledge Base (Collapsible) -->
                     <div id="kb-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
                         <h2 class="text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
                         <svg id="kb-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                     </div>
 
-                    <!-- Knowledge Base Content -->
                     <div id="kb-content" class="flex-1 p-4 sm:p-6 flex flex-col lg:flex">
                         <h2 class="hidden lg:block text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
                         <p class="hidden lg:block text-sm text-slate-400 mt-1 mb-4">Provide context for the AI to learn from.</p>
+
+                        <div class="mb-4">
+                            <label for="file-input" class="block text-sm font-medium text-slate-300 mb-2">Upload a document:</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="file" id="file-input" class="hidden" accept=".txt,.pdf,.docx,.pptx,.xlsx,.xls,.csv,.json,.xml,.html,.htm,.md,.markdown,.rtf">
+                                <label for="file-input" class="flex-1 cursor-pointer bg-slate-900/50 border border-slate-600/50 rounded-lg p-2 text-slate-400 hover:bg-slate-800/50 transition truncate">
+                                    <span id="file-name" class="text-slate-400">Choose a file...</span>
+                                </label>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-2 space-y-1">
+                                <p>📄 <strong>Supported formats:</strong></p>
+                                <p>• <strong>Text:</strong> .txt, .md, .rtf</p>
+                                <p>• <strong>Documents:</strong> .pdf, .docx</p>
+                                <p>• <strong>Presentations:</strong> .pptx</p>
+                                <p>• <strong>Data:</strong> .xlsx, .csv, .json, .xml</p>
+                                <p>• <strong>Web:</strong> .html</p>
+                                <p class="text-slate-400 italic">Uploading a file will replace the text in the text area below.</p>
+                            </div>
+                        </div>
+
                         <div class="flex-1 flex flex-col">
-                           <textarea id="context-input" class="w-full flex-1 bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition scroll-container min-h-[250px] lg:min-h-0" placeholder="Paste your documents, meeting notes, or any relevant context here..."></textarea>
+                           <textarea id="context-input" class="w-full flex-1 bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition scroll-container min-h-[250px] lg:min-h-0" placeholder="... or paste your documents, meeting notes, or any relevant context here"></textarea>
                         </div>
                         <div class="mt-4 flex items-center justify-between">
                             <div class="text-xs text-slate-400">
@@ -165,15 +177,12 @@
                     </div>
                 </div>
 
-                <!-- Right Panel: AI Assistant -->
                 <div class="w-full lg:w-1/2 flex flex-col">
-                    <!-- Mobile Header for AI Assistant (Collapsible) -->
                     <div id="assistant-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
                         <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
                         <svg id="assistant-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                     </div>
 
-                    <!-- AI Assistant Content -->
                     <div id="assistant-content" class="flex-1 flex flex-col lg:flex lg:overflow-hidden">
                         <div class="hidden lg:block p-6 border-b border-slate-600/30">
                             <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
@@ -189,8 +198,7 @@
                             </select>
                         </div>
                         <div id="chat-container" class="flex-1 overflow-y-auto scroll-container p-6 space-y-6 min-h-[300px] lg:min-h-0">
-                            <!-- Chat messages will be dynamically added here -->
-                        </div>
+                            </div>
                         <div class="p-4 sm:p-6 border-t border-slate-600/30">
                             <div class="relative">
                                 <textarea id="chat-input" rows="1" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-3 pr-12 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition" placeholder="Ask a question or provide a prompt..." style="max-height: 120px;"></textarea>
@@ -200,8 +208,7 @@
                             </div>
                             <div class="flex items-center justify-between mt-3 text-xs text-slate-400 h-5">
                                 <div id="status-indicator" class="hidden">
-                                    <!-- Status messages appear here -->
-                                </div>
+                                    </div>
                             </div>
                         </div>
                     </div>
@@ -210,6 +217,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2.2.1"></script>
 </body>
 </html>
