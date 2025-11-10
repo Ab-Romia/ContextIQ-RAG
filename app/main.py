@@ -57,10 +57,10 @@ async def debug_config():
 @app.post("/api/v1/test-api-key", response_model=schemas.ApiKeyTestResponse)
 async def test_api_key_endpoint(api_key_request: schemas.ApiKeyRequest):
     """
-    Test if the provided API key is valid.
+    Test if the provided API key is valid (OpenRouter or OpenAI).
     """
     try:
-        result = await services.test_api_key(api_key_request.api_key)
+        result = await services.test_api_key(api_key_request.api_key, api_key_request.provider)
         return schemas.ApiKeyTestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

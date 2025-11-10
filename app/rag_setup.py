@@ -2,14 +2,15 @@ import chromadb
 import logging
 import requests
 import json
-from config import settings  # Fixed: removed 'app.' prefix
+from config import settings, detect_provider_from_key  # Fixed: removed 'app.' prefix
 import time
 import os
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from typing import List
+from typing import List, Optional
 import hashlib
 import re
+from openai import OpenAI
 
 # Disable ChromaDB telemetry to avoid errors
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
@@ -403,29 +404,233 @@ class OpenRouterLLM:
                 time.sleep(wait_time)
 
 
-# Initialize the generation model
-logger.info("🚀 Creating OpenRouter LLM instance...")
+class OpenAILLM:
+    """OpenAI LLM client for GPT models"""
+
+    def __init__(self, api_key: str, base_url: str, model: str):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+        self.client = None
+
+        logger.info("=" * 60)
+        logger.info("🚀 INITIALIZING OPENAI LLM")
+        logger.info("=" * 60)
+        logger.info(f"🤖 Model: {model}")
+        logger.info(f"🔑 API Key present: {'Yes' if api_key else 'No'}")
+        logger.info(f"📏 API Key length: {len(api_key) if api_key else 0}")
+        logger.info(f"🌐 API URL: {base_url}")
+
+        if not api_key or not api_key.strip():
+            logger.error("❌ OpenAI API key is missing or empty")
+            self.client_ready = False
+            return
+
+        # Initialize OpenAI client
+        try:
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+            logger.info("✅ OpenAI client initialized")
+
+            # Test the connection with minimal tokens
+            test_response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=5
+            )
+            if test_response:
+                logger.info("✅ OpenAI connection test successful")
+                self.client_ready = True
+            else:
+                logger.error("❌ OpenAI connection test failed")
+                self.client_ready = False
+        except Exception as e:
+            logger.error(f"❌ OpenAI initialization failed: {e}")
+            self.client_ready = False
+
+        logger.info("=" * 60)
+
+    def generate_content(self, prompt: str, max_tokens: int = 2000) -> str:
+        """Generate content using OpenAI API"""
+        logger.info("=" * 80)
+        logger.info("🧠 OPENAI CONTENT GENERATION STARTED")
+        logger.info("=" * 80)
+        logger.info(f"📏 Input prompt length: {len(prompt)} characters")
+        logger.info(f"🎯 Requested max tokens: {max_tokens}")
+        logger.info(f"🔧 Client status: {'Ready' if self.client_ready else 'Not ready'}")
+
+        # Check client readiness
+        if not self.client_ready or not self.client:
+            error_msg = "❌ OpenAI client is not ready. Please check your API key and connection."
+            logger.error(error_msg)
+            return error_msg
+
+        # Optimize prompt length
+        original_length = len(prompt)
+        max_prompt_length = 12000 if max_tokens > 3000 else 8000
+
+        if len(prompt) > max_prompt_length:
+            logger.warning(f"⚠️  Prompt is quite long ({original_length} chars), truncating for better performance")
+            if "Context:" in prompt and "Question:" in prompt:
+                parts = prompt.split("Question:")
+                if len(parts) == 2:
+                    context_part = parts[0]
+                    question_part = "Question:" + parts[1]
+                    available_for_context = max_prompt_length - len(question_part) - 500
+                    if len(context_part) > available_for_context:
+                        context_part = context_part[:available_for_context] + "\n\n[... content truncated ...]"
+                    prompt = context_part + question_part
+                    logger.info(f"📏 Prompt intelligently truncated from {original_length} to {len(prompt)} characters")
+            else:
+                prompt = prompt[:max_prompt_length] + "\n\n[... content truncated ...]"
+                logger.info(f"📏 Prompt truncated from {original_length} to {len(prompt)} characters")
+
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            try:
+                logger.info(f"🔄 API call attempt {retry_count + 1}/{max_retries + 1}")
+
+                current_max_tokens = max_tokens
+                if retry_count > 0:
+                    current_max_tokens = max(1000, max_tokens - (retry_count * 500))
+                    logger.info(f"🔧 Retry attempt - reducing max_tokens to {current_max_tokens}")
+
+                start_time = time.time()
+
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=current_max_tokens,
+                    temperature=0.7,
+                    top_p=0.9,
+                )
+
+                request_time = time.time() - start_time
+                logger.info(f"⏱️  API request completed in {request_time:.2f}s")
+
+                if response and response.choices:
+                    content = response.choices[0].message.content
+                    if content:
+                        logger.info(f"✅ Successfully generated response")
+                        logger.info(f"📏 Response length: {len(content)} characters")
+
+                        # Check token usage
+                        if hasattr(response, 'usage') and response.usage:
+                            logger.info(f"📊 Token usage: {response.usage}")
+                            if response.usage.completion_tokens >= current_max_tokens * 0.95:
+                                logger.warning(f"⚠️  Response may be truncated")
+                                content += "\n\n[Note: Response may be truncated due to token limits.]"
+
+                        response_preview = content[:400] + "..." if len(content) > 400 else content
+                        logger.info(f"📤 RESPONSE PREVIEW: {response_preview}")
+                        logger.info("=" * 80)
+                        return content
+                    else:
+                        logger.error("❌ Received empty response")
+                        if retry_count < max_retries:
+                            retry_count += 1
+                            continue
+                        return "❌ Received empty response from OpenAI."
+                else:
+                    logger.error("❌ Invalid response format")
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        continue
+                    return "❌ Invalid response format from OpenAI."
+
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ API call failed (attempt {retry_count + 1}): {error_msg}")
+
+                # Handle rate limits
+                if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                    wait_time = 2 ** retry_count
+                    logger.info(f"⏳ Rate limit hit, waiting {wait_time}s...")
+                    time.sleep(wait_time)
+
+                retry_count += 1
+                if retry_count > max_retries:
+                    final_error = f"❌ Error: Failed after {max_retries + 1} attempts. Final error: {error_msg}"
+                    logger.error(final_error)
+                    logger.info("=" * 80)
+                    return final_error
+
+                time.sleep(2 * retry_count)
+
+
+def create_llm(api_key: str, provider: Optional[str] = None) -> 'OpenRouterLLM | OpenAILLM':
+    """
+    Factory function to create the appropriate LLM client based on API key or provider.
+
+    Args:
+        api_key: The API key to use
+        provider: Optional provider name ('openrouter' or 'openai'). If not provided, will auto-detect.
+
+    Returns:
+        An instance of OpenRouterLLM or OpenAILLM
+    """
+    # Auto-detect provider if not specified
+    if provider is None:
+        provider = detect_provider_from_key(api_key)
+        logger.info(f"🔍 Auto-detected provider: {provider}")
+
+    provider = provider.lower()
+
+    if provider == "openai":
+        logger.info("🎯 Creating OpenAI LLM client")
+        return OpenAILLM(
+            api_key=api_key,
+            base_url=settings.OPENAI_URL,
+            model=settings.OPENAI_MODEL
+        )
+    elif provider == "openrouter":
+        logger.info("🎯 Creating OpenRouter LLM client")
+        return OpenRouterLLM(
+            api_key=api_key,
+            base_url=settings.OPENROUTER_URL,
+            model=settings.OPENROUTER_MODEL
+        )
+    else:
+        logger.warning(f"⚠️  Unknown provider '{provider}', defaulting to OpenRouter")
+        return OpenRouterLLM(
+            api_key=api_key,
+            base_url=settings.OPENROUTER_URL,
+            model=settings.OPENROUTER_MODEL
+        )
+
+
+# Initialize the generation model with default settings
+logger.info("🚀 Creating default LLM instance...")
 try:
-    generation_model = OpenRouterLLM(
-        api_key=settings.OPENROUTER_API_KEY,
-        base_url=settings.OPENROUTER_URL,
-        model=settings.MODEL_NAME
-    )
+    # Use OpenRouter by default if API key is available
+    if settings.OPENROUTER_API_KEY:
+        generation_model = OpenRouterLLM(
+            api_key=settings.OPENROUTER_API_KEY,
+            base_url=settings.OPENROUTER_URL,
+            model=settings.OPENROUTER_MODEL
+        )
+    elif settings.OPENAI_API_KEY:
+        generation_model = OpenAILLM(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_URL,
+            model=settings.OPENAI_MODEL
+        )
+    else:
+        raise ValueError("No API key configured")
 
     if generation_model.client_ready:
-        logger.info("✅ RAG setup completed successfully - OpenRouter client is ready")
+        logger.info("✅ RAG setup completed successfully - LLM client is ready")
     else:
-        logger.error("❌ RAG setup completed but OpenRouter client is not ready")
+        logger.error("❌ RAG setup completed but LLM client is not ready")
 
 except Exception as e:
-    logger.error(f"❌ Error creating OpenRouter LLM: {e}")
-
+    logger.error(f"❌ Error creating LLM: {e}")
 
     # Create a dummy model for graceful degradation
     class DummyLLM:
-        def generate_content(self, prompt: str) -> str:
+        def generate_content(self, prompt: str, max_tokens: int = 2000) -> str:
             return f"❌ AI model is not available. Initialization error: {str(e)}"
-
 
     generation_model = DummyLLM()
     logger.warning("⚠️  Using dummy LLM due to initialization failure")

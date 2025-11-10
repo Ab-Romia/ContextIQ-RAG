@@ -36,7 +36,11 @@ class ApiKeyRequest(BaseModel):
     api_key: str = Field(
         ...,
         min_length=10,
-        description="The OpenRouter API key to test."
+        description="The API key to test (OpenRouter or OpenAI)."
+    )
+    provider: Optional[str] = Field(
+        None,
+        description="The provider for the API key ('openrouter' or 'openai'). Auto-detected if not provided."
     )
 
 class ChatResponse(BaseModel):

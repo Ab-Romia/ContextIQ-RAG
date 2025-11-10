@@ -16,6 +16,9 @@ class ContextAwareApp {
 
             // API Key elements
             apiKeyInput: document.getElementById('api-key-input'),
+            providerSelect: document.getElementById('provider-select'),
+            providerLink: document.getElementById('provider-link'),
+            providerModels: document.getElementById('provider-models'),
             testApiKeyBtn: document.getElementById('test-api-key'),
             saveApiKeyBtn: document.getElementById('save-api-key'),
             apiKeyStatus: document.getElementById('api-key-status'),
@@ -46,6 +49,7 @@ class ContextAwareApp {
             apiKeyValidated: false,
             isTestingApiKey: false,
             userApiKey: '',
+            provider: 'openrouter', // Default provider
             // Collapse states for mobile view
             apiSectionCollapsed: false,
             kbSectionCollapsed: false,
@@ -67,10 +71,12 @@ class ContextAwareApp {
         this.addMessageToChat(
             "👋 **Welcome to ContextIQ!**\n\n" +
             "To get started:\n" +
-            "1. **Enter your OpenRouter API key** in the configuration section above.\n" +
-            "2. **Add your context** by uploading a file or pasting text in the Knowledge Base.\n" +
-            "3. **Index the context** and start asking questions!\n\n" +
-            "🆓 You can get a free API key from [openrouter.ai](https://openrouter.ai) - no credit card required!",
+            "1. **Choose your AI provider** (OpenRouter or OpenAI) in the configuration section above.\n" +
+            "2. **Enter your API key** for your chosen provider.\n" +
+            "3. **Add your context** by uploading a file or pasting text in the Knowledge Base.\n" +
+            "4. **Index the context** and start asking questions!\n\n" +
+            "🆓 **OpenRouter** offers free access to 200+ models including Claude, GPT, and Gemini!\n" +
+            "💡 **OpenAI** provides GPT-4o, GPT-4o-mini, and other cutting-edge models!",
             'system'
         );
 
@@ -106,6 +112,11 @@ class ContextAwareApp {
         // File input listener
         this.elements.fileInput.addEventListener('change', () => this.handleFileSelection());
 
+
+        // Provider selection listener
+        this.elements.providerSelect.addEventListener('change', () => {
+            this.handleProviderChange();
+        });
 
         // API Key listeners
         this.elements.testApiKeyBtn.addEventListener('click', (e) => {
@@ -204,10 +215,23 @@ class ContextAwareApp {
      */
     loadStoredApiKey() {
         try {
-            const storedKey = localStorage.getItem('openrouter_api_key');
+            const storedKey = localStorage.getItem('ai_api_key');
+            const storedProvider = localStorage.getItem('ai_provider');
+
             if (storedKey) {
                 this.elements.apiKeyInput.value = storedKey;
                 this.state.userApiKey = storedKey;
+            }
+
+            if (storedProvider) {
+                this.state.provider = storedProvider;
+                this.elements.providerSelect.value = storedProvider;
+            }
+
+            // Update UI based on provider
+            this.handleProviderChange();
+
+            if (storedKey) {
                 this.onApiKeyInputChange();
             }
         } catch (error) {
@@ -220,14 +244,17 @@ class ContextAwareApp {
      */
     onApiKeyInputChange() {
         const apiKey = this.elements.apiKeyInput.value.trim();
+        const provider = this.state.provider;
 
         this.state.apiKeyValidated = false;
         this.state.userApiKey = '';
 
         if (!apiKey) {
             this.updateApiKeyStatus('pending', 'Enter API key and click Test');
-        } else if (!apiKey.startsWith('sk-or-')) {
-            this.updateApiKeyStatus('error', 'Key should start with "sk-or-"');
+        } else if (provider === 'openrouter' && !apiKey.startsWith('sk-or-')) {
+            this.updateApiKeyStatus('error', 'OpenRouter keys should start with "sk-or-"');
+        } else if (provider === 'openai' && !apiKey.startsWith('sk-')) {
+            this.updateApiKeyStatus('error', 'OpenAI keys should start with "sk-"');
         } else if (apiKey.length < 40) {
             this.updateApiKeyStatus('error', 'API key appears too short');
         } else {
@@ -258,7 +285,10 @@ class ContextAwareApp {
             const response = await fetch('/api/v1/test-api-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: apiKey }),
+                body: JSON.stringify({
+                    api_key: apiKey,
+                    provider: this.state.provider
+                }),
                 signal: controller.signal
             });
 
@@ -305,13 +335,39 @@ class ContextAwareApp {
             return;
         }
         try {
-            localStorage.setItem('openrouter_api_key', apiKey);
+            localStorage.setItem('ai_api_key', apiKey);
+            localStorage.setItem('ai_provider', this.state.provider);
             this.updateApiKeyStatus('success', 'API key saved locally!');
-            this.addMessageToChat("💾 **API Key Saved!** It will be remembered for future sessions.", 'system');
+            const providerName = this.state.provider === 'openai' ? 'OpenAI' : 'OpenRouter';
+            this.addMessageToChat(`💾 **API Key Saved!** Your ${providerName} key will be remembered for future sessions.`, 'system');
         } catch (error) {
             console.error('Save error:', error);
             this.addMessageToChat("❌ **Save Failed**: Could not save API key to local storage.", 'system');
         }
+    }
+
+    /**
+     * Handle provider selection change
+     */
+    handleProviderChange() {
+        this.state.provider = this.elements.providerSelect.value;
+
+        // Update placeholder text
+        if (this.state.provider === 'openai') {
+            this.elements.apiKeyInput.placeholder = 'sk-your-openai-api-key-here';
+            this.elements.providerLink.innerHTML = '• Get your OpenAI API key from <a href="https://platform.openai.com/api-keys" target="_blank" class="text-indigo-400 hover:text-indigo-300">platform.openai.com</a>';
+            this.elements.providerModels.textContent = '• Access GPT-4o, GPT-4o-mini, GPT-4, GPT-3.5-turbo, and more models';
+        } else {
+            this.elements.apiKeyInput.placeholder = 'sk-or-your-openrouter-api-key-here';
+            this.elements.providerLink.innerHTML = '• Get your free API key from <a href="https://openrouter.ai/" target="_blank" class="text-indigo-400 hover:text-indigo-300">openrouter.ai</a>';
+            this.elements.providerModels.textContent = '• OpenRouter provides access to 200+ models including Claude, GPT, Gemini, and more';
+        }
+
+        // Reset validation state when provider changes
+        this.state.apiKeyValidated = false;
+        this.state.userApiKey = '';
+        this.onApiKeyInputChange();
+        this.updateUI();
     }
 
     /**

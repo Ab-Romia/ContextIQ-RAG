@@ -9,6 +9,14 @@ class Settings(BaseSettings):
     # OpenRouter Configuration
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_MODEL: str = "deepseek/deepseek-r1-0528:free"
+
+    # OpenAI Configuration
+    OPENAI_API_KEY: str = ""
+    OPENAI_URL: str = "https://api.openai.com/v1"
+    OPENAI_MODEL: str = "gpt-4o-mini"  # Default to GPT-4o-mini for cost efficiency
+
+    # Legacy field for backward compatibility
     MODEL_NAME: str = "deepseek/deepseek-r1-0528:free"
 
     # Token Limits Configuration
@@ -111,21 +119,47 @@ def get_timeout_for_tokens(max_tokens: int) -> int:
     return settings.REQUEST_TIMEOUT_BASE + additional_time
 
 
-def validate_api_key(api_key: str) -> bool:
-    """Validate OpenRouter API key format"""
+def validate_api_key(api_key: str, provider: str = "openrouter") -> bool:
+    """Validate API key format for OpenRouter or OpenAI"""
     if not api_key:
         return False
 
-    # OpenRouter keys should start with "sk-or-" and be at least 40 characters
-    if not api_key.startswith("sk-or-"):
-        logger.warning("⚠️  API key should start with 'sk-or-'")
-        return False
+    provider = provider.lower()
 
-    if len(api_key) < 40:
-        logger.warning("⚠️  API key seems too short")
+    if provider == "openrouter":
+        # OpenRouter keys should start with "sk-or-" and be at least 40 characters
+        if not api_key.startswith("sk-or-"):
+            logger.warning("⚠️  OpenRouter API key should start with 'sk-or-'")
+            return False
+        if len(api_key) < 40:
+            logger.warning("⚠️  OpenRouter API key seems too short")
+            return False
+    elif provider == "openai":
+        # OpenAI keys should start with "sk-" and be at least 40 characters
+        if not api_key.startswith("sk-"):
+            logger.warning("⚠️  OpenAI API key should start with 'sk-'")
+            return False
+        if len(api_key) < 40:
+            logger.warning("⚠️  OpenAI API key seems too short")
+            return False
+    else:
+        logger.warning(f"⚠️  Unknown provider: {provider}")
         return False
 
     return True
+
+
+def detect_provider_from_key(api_key: str) -> str:
+    """Detect provider from API key format"""
+    if not api_key:
+        return "unknown"
+
+    if api_key.startswith("sk-or-"):
+        return "openrouter"
+    elif api_key.startswith("sk-proj-") or api_key.startswith("sk-"):
+        return "openai"
+    else:
+        return "unknown"
 
 
 # Validate the current server API key (if present)
@@ -136,4 +170,4 @@ else:
     logger.info("🔍 No server API key to validate")
 
 # Export settings
-__all__ = ['settings', 'validate_api_key']
+__all__ = ['settings', 'validate_api_key', 'detect_provider_from_key', 'get_max_tokens_for_task', 'get_timeout_for_tokens']

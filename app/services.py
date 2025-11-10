@@ -6,7 +6,7 @@ import time
 import rag_setup
 from schemas import ChatRequest, DocumentRequest, TaskRequest
 from typing import Optional, Tuple
-from config import settings  # Fixed: removed 'app.' prefix
+from config import settings, detect_provider_from_key  # Fixed: removed 'app.' prefix
 from fastapi import UploadFile, HTTPException
 import json
 import xml.etree.ElementTree as ET
@@ -60,17 +60,13 @@ _response_cache = {}
 CACHE_EXPIRATION_SECONDS = 600  # 10 minutes
 
 
-def create_llm_instance(api_key: str) -> rag_setup.OpenRouterLLM:
-    """Create a new LLM instance with the provided API key."""
-    return rag_setup.OpenRouterLLM(
-        api_key=api_key,
-        base_url=settings.OPENROUTER_URL,
-        model=settings.MODEL_NAME
-    )
+def create_llm_instance(api_key: str, provider: Optional[str] = None):
+    """Create a new LLM instance with the provided API key (OpenRouter or OpenAI)."""
+    return rag_setup.create_llm(api_key=api_key, provider=provider)
 
 
-async def test_api_key(api_key: str) -> dict:
-    """Test if the provided API key is valid."""
+async def test_api_key(api_key: str, provider: Optional[str] = None) -> dict:
+    """Test if the provided API key is valid (OpenRouter or OpenAI)."""
     logger.info(f"🔍 Testing API key: {api_key[:10]}...")
 
     try:
@@ -83,11 +79,33 @@ async def test_api_key(api_key: str) -> dict:
                 "model_info": None
             }
 
-        if not api_key.startswith('sk-or-'):
-            logger.error("❌ API key has incorrect format")
+        # Auto-detect provider if not specified
+        if provider is None:
+            provider = detect_provider_from_key(api_key)
+            logger.info(f"🔍 Auto-detected provider: {provider}")
+
+        # Validate based on provider
+        if provider == "openrouter":
+            if not api_key.startswith('sk-or-'):
+                logger.error("❌ API key has incorrect format for OpenRouter")
+                return {
+                    "valid": False,
+                    "message": "OpenRouter API keys should start with 'sk-or-'",
+                    "model_info": None
+                }
+        elif provider == "openai":
+            if not api_key.startswith('sk-'):
+                logger.error("❌ API key has incorrect format for OpenAI")
+                return {
+                    "valid": False,
+                    "message": "OpenAI API keys should start with 'sk-'",
+                    "model_info": None
+                }
+        else:
+            logger.error("❌ Unknown provider")
             return {
                 "valid": False,
-                "message": "OpenRouter API keys should start with 'sk-or-'",
+                "message": f"Unknown provider: {provider}. Please use OpenRouter or OpenAI.",
                 "model_info": None
             }
 
@@ -100,9 +118,42 @@ async def test_api_key(api_key: str) -> dict:
             }
 
         # Create a temporary LLM instance
-        test_llm = create_llm_instance(api_key)
+        test_llm = create_llm_instance(api_key, provider)
 
         # Test with a minimal prompt to avoid quota usage
+        if provider == "openai":
+            # OpenAI uses the SDK, so we test differently
+            try:
+                test_content = test_llm.generate_content("Hi", max_tokens=5)
+                if test_content and not test_content.startswith("❌"):
+                    logger.info("✅ OpenAI API key test successful")
+                    return {
+                        "valid": True,
+                        "message": "OpenAI API key is valid and working!",
+                        "model_info": {"model": settings.OPENAI_MODEL, "provider": "openai"}
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "message": test_content or "API key test failed",
+                        "model_info": None
+                    }
+            except Exception as e:
+                error_msg = str(e)
+                if "401" in error_msg or "Incorrect API key" in error_msg:
+                    return {
+                        "valid": False,
+                        "message": "Invalid OpenAI API key: Authentication failed",
+                        "model_info": None
+                    }
+                else:
+                    return {
+                        "valid": False,
+                        "message": f"OpenAI API key test failed: {error_msg}",
+                        "model_info": None
+                    }
+
+        # For OpenRouter, use the existing logic
         test_response = test_llm._make_api_request("Hi", max_tokens=1)
 
         # Check for explicit errors first

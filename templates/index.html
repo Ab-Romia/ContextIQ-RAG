@@ -106,11 +106,19 @@
                 </div>
 
                 <div id="api-key-content" class="space-y-4 mt-4">
+                    <div class="mb-3">
+                        <label for="provider-select" class="block text-sm font-medium text-slate-300 mb-2">Choose AI Provider:</label>
+                        <select id="provider-select" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                            <option value="openrouter">OpenRouter (Free & Multiple Models)</option>
+                            <option value="openai">OpenAI (GPT-4, GPT-3.5, etc.)</option>
+                        </select>
+                    </div>
+
                     <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                         <input
                             type="password"
                             id="api-key-input"
-                            placeholder="sk-or-your-openrouter-api-key-here"
+                            placeholder="Enter your API key here..."
                             class="flex-1 bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
                         >
                         <div class="flex space-x-2">
@@ -123,9 +131,10 @@
                         </div>
                     </div>
 
-                    <div class="text-xs text-slate-400 space-y-1">
-                        <p>• Get your free API key from <a href="https://openrouter.ai/" target="_blank" class="text-indigo-400 hover:text-indigo-300">openrouter.ai</a></p>
+                    <div id="provider-info" class="text-xs text-slate-400 space-y-1">
+                        <p id="provider-link">• Get your free API key from <a href="https://openrouter.ai/" target="_blank" class="text-indigo-400 hover:text-indigo-300">openrouter.ai</a></p>
                         <p>• Your API key is stored locally in your browser and never sent to our servers</p>
+                        <p id="provider-models">• OpenRouter provides access to 200+ models including Claude, GPT, Gemini, and more</p>
                     </div>
 
                     <div id="api-key-status" class="hidden p-3 rounded-lg text-sm"></div>

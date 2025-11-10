@@ -1,8 +1,24 @@
+# Core Framework
 fastapi~=0.116.1
 uvicorn~=0.35.0
+pydantic~=2.11.7
 pydantic-settings~=2.10.1
+python-multipart~=0.0.20
+jinja2~=3.1.2
+
+# AI/ML Libraries
+openai~=1.62.0
 chromadb~=1.0.15
-requests~=2.32.4
 scikit-learn~=1.7.1
 numpy~=2.3.1
-pydantic~=2.11.7
+requests~=2.32.4
+
+# File Processing Libraries
+PyMuPDF~=1.25.2
+python-docx~=1.1.2
+python-pptx~=1.0.2
+pandas~=2.2.3
+openpyxl~=3.1.5
+beautifulsoup4~=4.12.3
+striprtf~=0.0.26
+markdown~=3.7
