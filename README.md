@@ -21,7 +21,7 @@ ContextIQ is an advanced **Retrieval-Augmented Generation (RAG)** application th
 
 ### ✨ Key Highlights
 
-- 🎯 **Dual AI Provider Support**: Choose between OpenAI (GPT-4o, GPT-4, GPT-3.5) or OpenRouter (200+ models including Claude, Gemini, and more)
+- 🎯 **Dual AI Provider Support**: Choose between OpenAI (GPT-4o, GPT-4, GPT-3.5) or OpenRouter (200+ models including DeepSeek R1 FREE, Claude, Gemini, and more)
 - 📚 **11+ File Formats Supported**: PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, HTML, JSON, XML, RTF
 - 🚀 **Lightning-Fast RAG Pipeline**: Custom TF-IDF embeddings + ChromaDB vector search
 - 💎 **Beautiful Modern UI**: Dark-themed, responsive interface with Tailwind CSS
@@ -111,7 +111,8 @@ ContextIQ is an advanced **Retrieval-Augmented Generation (RAG)** application th
 ### 1. Choose Your AI Provider
 
 - **OpenAI**: Access to GPT-4o, GPT-4o-mini, GPT-4, GPT-3.5-turbo
-- **OpenRouter**: 200+ models including Claude 3.5, GPT-4, Gemini, Llama 3, and more
+- **OpenRouter**: 200+ models including DeepSeek R1 (FREE), Claude, GPT-4, Gemini, Llama 3, and more
+  - **Default model**: DeepSeek R1 (completely free to use)
 
 ### 2. Upload Your Documents
 

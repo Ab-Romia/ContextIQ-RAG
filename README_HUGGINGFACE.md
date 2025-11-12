@@ -25,9 +25,9 @@ Welcome to **ContextIQ**, a sophisticated RAG (Retrieval-Augmented Generation) a
 
 Choose your preferred AI provider:
 
-### OpenRouter (FREE Option Available!)
-- 200+ models including Claude 3.5, GPT-4, Gemini, Llama 3
-- Free tier available
+### OpenRouter (FREE DeepSeek Model!)
+- 200+ models including DeepSeek R1 (FREE), Claude, GPT-4, Gemini, Llama 3
+- **Default**: DeepSeek R1 - completely free to use
 - Get your key: [openrouter.ai](https://openrouter.ai/)
 
 ### OpenAI
@@ -87,9 +87,9 @@ Choose your preferred AI provider:
 - **Context Matters**: The more relevant text you provide, the better the answers
 - **Chunk Size**: Large documents are automatically split into manageable chunks
 - **Model Selection**:
-  - Use OpenRouter's Claude 3.5 for advanced reasoning
+  - Use OpenRouter's DeepSeek R1 (FREE) for excellent reasoning at no cost
   - Use OpenAI's GPT-4o for production workloads
-  - Use free models for testing
+  - Default DeepSeek model is completely free - no credit card needed!
 
 ## 🤝 Open Source
 
