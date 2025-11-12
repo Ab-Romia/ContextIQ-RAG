@@ -680,36 +680,25 @@ async def _process_rtf_file(file_content: bytes) -> str:
 def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 100) -> list:
     """
     Create overlapping text chunks for better context preservation.
-
-    Args:
-        text: The text to chunk
-        chunk_size: Size of each chunk in characters
-        overlap: Number of characters to overlap between chunks
-
-    Returns:
-        List of text chunks with overlap
     """
     chunks = []
     start = 0
     text_length = len(text)
 
     while start < text_length:
-        # Define the end of the current chunk
         end = start + chunk_size
 
-        # If this is not the last chunk, try to break at a sentence or word boundary
         if end < text_length:
-            # Look for sentence boundaries (., !, ?)
+            # Look for sentence boundaries
             sentence_end = max(
                 text.rfind('.', start, end),
                 text.rfind('!', start, end),
                 text.rfind('?', start, end)
             )
 
-            if sentence_end > start + chunk_size // 2:  # If found in reasonable position
+            if sentence_end > start + chunk_size // 2:
                 end = sentence_end + 1
             else:
-                # Fall back to word boundary
                 space_pos = text.rfind(' ', start, end)
                 if space_pos > start + chunk_size // 2:
                     end = space_pos
@@ -718,8 +707,9 @@ def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 
         if chunk:
             chunks.append(chunk)
 
-        # Move start position with overlap
-        start = end - overlap if end < text_length else text_length
+        # Ensure we always move forward to avoid infinite loops
+        next_start = end - overlap if end < text_length else text_length
+        start = max(next_start, start + 1)
 
     return chunks
 
