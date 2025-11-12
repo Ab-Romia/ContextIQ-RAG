@@ -677,10 +677,15 @@ async def _process_rtf_file(file_content: bytes) -> str:
         raise HTTPException(status_code=400, detail=f"Could not process RTF file: {str(e)}")
 
 
-def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 100) -> list:
+def _create_overlapping_chunks(text: str, chunk_size: int = None, overlap: int = None) -> list:
     """
-    Create overlapping text chunks for better context preservation.
+    Create overlapping text chunks with smart boundary detection.
     """
+    if chunk_size is None:
+        chunk_size = settings.CHUNK_SIZE
+    if overlap is None:
+        overlap = settings.CHUNK_OVERLAP
+
     chunks = []
     start = 0
     text_length = len(text)
@@ -689,7 +694,7 @@ def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 
         end = start + chunk_size
 
         if end < text_length:
-            # Look for sentence boundaries
+            # Try sentence boundaries first
             sentence_end = max(
                 text.rfind('.', start, end),
                 text.rfind('!', start, end),
@@ -699,15 +704,20 @@ def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 
             if sentence_end > start + chunk_size // 2:
                 end = sentence_end + 1
             else:
-                space_pos = text.rfind(' ', start, end)
-                if space_pos > start + chunk_size // 2:
-                    end = space_pos
+                # Try paragraph or line break
+                newline_pos = text.rfind('\n', start, end)
+                if newline_pos > start + chunk_size // 2:
+                    end = newline_pos + 1
+                else:
+                    # Fall back to word boundary
+                    space_pos = text.rfind(' ', start, end)
+                    if space_pos > start + chunk_size // 2:
+                        end = space_pos
 
         chunk = text[start:end].strip()
-        if chunk:
+        if chunk and len(chunk) > 20:
             chunks.append(chunk)
 
-        # Ensure we always move forward to avoid infinite loops
         next_start = end - overlap if end < text_length else text_length
         start = max(next_start, start + 1)
 
@@ -736,12 +746,8 @@ def index_document(request_data: DocumentRequest) -> int:
             logger.info("📂 No existing documents to clear.")
 
         # Step 2: Enhanced chunking with overlap for better context preservation
-        logger.info("✂️  Creating overlapping chunks for better context continuity...")
-        text_chunks = _create_overlapping_chunks(
-            request_data.context,
-            chunk_size=500,  # Optimal size for retrieval
-            overlap=100  # 20% overlap for context preservation
-        )
+        logger.info(f"✂️  Creating overlapping chunks ({settings.CHUNK_SIZE} chars, {settings.CHUNK_OVERLAP} overlap)...")
+        text_chunks = _create_overlapping_chunks(request_data.context)
 
         if not text_chunks:
             logger.warning("⚠️  No text chunks were generated.")

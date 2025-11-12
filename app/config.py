@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     MAX_TOKENS_CREATIVE: int = 6000  # For creative writing
     MAX_TOKENS_TEST: int = 50  # For API key testing
 
-    # Context Limits
-    MAX_CONTEXT_LENGTH_CHAT: int = 10000  # For chat context (increased for better context)
-    MAX_CONTEXT_LENGTH_TASK: int = 15000  # For task context (increased for better context)
-    MAX_CHUNKS_RETRIEVE: int = 4  # Number of chunks to retrieve (increased with overlapping chunks)
+    # Context Limits - Optimized for better retrieval
+    MAX_CONTEXT_LENGTH_CHAT: int = 12000
+    MAX_CONTEXT_LENGTH_TASK: int = 16000
+    MAX_CHUNKS_RETRIEVE: int = 5
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 100
 
     # Performance Settings
     REQUEST_TIMEOUT_BASE: int = 120  # Base timeout in seconds
