@@ -40,6 +40,18 @@ class ContextAwareApp {
             assistantHeader: document.getElementById('assistant-header'),
             assistantContent: document.getElementById('assistant-content'),
             assistantToggleIcon: document.getElementById('assistant-toggle-icon'),
+
+            // RAG Info Panel elements
+            ragInfoPanel: document.getElementById('rag-info-panel'),
+            ragInfoContent: document.getElementById('rag-info-content'),
+            toggleRagInfo: document.getElementById('toggle-rag-info'),
+            ragToggleText: document.getElementById('rag-toggle-text'),
+            ragStatus: document.getElementById('rag-status'),
+            ragChunks: document.getElementById('rag-chunks'),
+            ragContextSize: document.getElementById('rag-context-size'),
+            ragModel: document.getElementById('rag-model'),
+            ragRetrieval: document.getElementById('rag-retrieval'),
+            ragHistory: document.getElementById('rag-history'),
         };
 
         // Application state
@@ -50,9 +62,11 @@ class ContextAwareApp {
             apiKeyValidated: false,
             isTestingApiKey: false,
             userApiKey: '',
-            provider: 'openrouter', // Default provider
-            conversationHistory: [], // Track conversation for context-aware responses
-            // Collapse states for mobile view
+            provider: 'openrouter',
+            conversationHistory: [],
+            ragInfoCollapsed: false,
+            chunksIndexed: 0,
+            contextSize: 0,
             apiSectionCollapsed: false,
             kbSectionCollapsed: false,
             assistantSectionCollapsed: false,
@@ -145,6 +159,11 @@ class ContextAwareApp {
         this.elements.toggleApiSection.addEventListener('click', () => this.toggleSection('api'));
         this.elements.kbHeader.addEventListener('click', () => this.toggleSection('kb'));
         this.elements.assistantHeader.addEventListener('click', () => this.toggleSection('assistant'));
+
+        // RAG info panel toggle
+        if (this.elements.toggleRagInfo) {
+            this.elements.toggleRagInfo.addEventListener('click', () => this.toggleRagInfo());
+        }
 
         // Listen for window resize to adjust UI
         window.addEventListener('resize', () => this.setupResponsiveUI());
@@ -303,6 +322,7 @@ class ContextAwareApp {
                 this.state.apiKeyValidated = true;
                 this.state.userApiKey = apiKey;
                 this.updateApiKeyStatus('success', result.message || 'API key is valid');
+                this.updateRagInfo();
                 if (!silent) {
                     this.addMessageToChat("✅ **API Key Validated!** You can now use the assistant.", 'system');
                     this.state.apiSectionCollapsed = true;
@@ -371,6 +391,7 @@ class ContextAwareApp {
         this.state.userApiKey = '';
         this.onApiKeyInputChange();
         this.updateUI();
+        this.updateRagInfo();
     }
 
     /**
@@ -480,13 +501,19 @@ class ContextAwareApp {
             }
 
             this.state.isIndexed = true;
+            this.state.chunksIndexed = result.documents_added || 0;
+            this.state.contextSize = textContext.length || result.extracted_text?.length || 0;
             this.showStatus(result.message || 'Successfully indexed context.', 'success');
 
-            // NEW: Populate textarea with extracted text if available
+            // Populate textarea with extracted text if available
             if (result.extracted_text) {
                 this.elements.contextInput.value = result.extracted_text;
+                this.state.contextSize = result.extracted_text.length;
                 this.updateContextStats();
             }
+
+            // Update RAG info panel
+            this.updateRagInfo();
 
         } catch (error) {
             console.error('Indexing error:', error);
@@ -522,6 +549,7 @@ class ContextAwareApp {
 
         this.state.isGenerating = true;
         this.updateUI();
+        this.updateRagInfo();
         this.showStatus('AI is thinking with full conversation context...', 'loading');
 
         try {
@@ -564,6 +592,7 @@ class ContextAwareApp {
         } finally {
             this.state.isGenerating = false;
             this.updateUI();
+            this.updateRagInfo();
         }
     }
 
@@ -627,10 +656,12 @@ class ContextAwareApp {
      */
     async handleClearContext() {
         this.elements.contextInput.value = '';
-        this.elements.fileInput.value = ''; // Also clear the file input
+        this.elements.fileInput.value = '';
         this.elements.fileName.textContent = 'Choose a file...';
         this.updateContextStats();
         this.state.isIndexed = false;
+        this.state.chunksIndexed = 0;
+        this.state.contextSize = 0;
 
         this.showStatus('Clearing knowledge base...', 'loading');
 
@@ -640,11 +671,15 @@ class ContextAwareApp {
                 headers: { 'X-API-Key': this.state.userApiKey }
             });
             this.showStatus('Knowledge base cleared. Ready for new context.', 'success');
+            if (this.elements.ragInfoPanel) {
+                this.elements.ragInfoPanel.classList.add('hidden');
+            }
         } catch (error) {
             console.error('Clear index error:', error);
             this.showStatus(`Error clearing index: ${error.message}`, 'error');
         } finally {
             this.updateUI();
+            this.updateRagInfo();
         }
     }
 
@@ -661,7 +696,55 @@ class ContextAwareApp {
             this.state.conversationHistory = [];
             this.showStatus('Conversation history cleared. The AI will start fresh.', 'success');
             this.addMessageToChat('💭 **Conversation history cleared.** I\'ll start fresh with your next question!', 'system');
+            this.updateRagInfo();
         }
+    }
+
+    toggleRagInfo() {
+        this.state.ragInfoCollapsed = !this.state.ragInfoCollapsed;
+        if (this.state.ragInfoCollapsed) {
+            this.elements.ragInfoContent.classList.add('hidden');
+            this.elements.ragToggleText.textContent = 'Show';
+        } else {
+            this.elements.ragInfoContent.classList.remove('hidden');
+            this.elements.ragToggleText.textContent = 'Hide';
+        }
+    }
+
+    updateRagInfo() {
+        if (!this.elements.ragInfoPanel) return;
+
+        // Show panel when indexed
+        if (this.state.isIndexed) {
+            this.elements.ragInfoPanel.classList.remove('hidden');
+        }
+
+        // Update status
+        if (this.state.isGenerating) {
+            this.elements.ragStatus.textContent = 'Processing...';
+            this.elements.ragStatus.className = 'font-medium text-yellow-400';
+        } else if (this.state.isIndexed) {
+            this.elements.ragStatus.textContent = 'Active';
+            this.elements.ragStatus.className = 'font-medium text-green-400';
+        } else {
+            this.elements.ragStatus.textContent = 'Ready';
+            this.elements.ragStatus.className = 'font-medium text-slate-400';
+        }
+
+        // Update chunks and context size
+        this.elements.ragChunks.textContent = this.state.chunksIndexed;
+        this.elements.ragContextSize.textContent = this.state.contextSize.toLocaleString() + ' chars';
+
+        // Update model info
+        const modelMap = {
+            'openrouter': 'DeepSeek R1 (Free)',
+            'openai': 'GPT-4o-mini'
+        };
+        this.elements.ragModel.textContent = this.state.apiKeyValidated ?
+            modelMap[this.state.provider] || this.state.provider : 'Not set';
+
+        // Update conversation history count
+        this.elements.ragHistory.textContent = this.state.conversationHistory.length + ' messages';
     }
 
     /**

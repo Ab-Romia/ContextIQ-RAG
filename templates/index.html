@@ -206,6 +206,43 @@
                                 <option value="creative">Creative Writing</option>
                             </select>
                         </div>
+
+                        <!-- RAG System Info Panel -->
+                        <div id="rag-info-panel" class="hidden p-4 sm:p-4 border-b border-slate-600/30 bg-slate-900/30">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-sm font-semibold text-indigo-400">📊 RAG System Info</h3>
+                                <button id="toggle-rag-info" class="text-xs text-slate-400 hover:text-slate-300">
+                                    <span id="rag-toggle-text">Hide</span>
+                                </button>
+                            </div>
+                            <div id="rag-info-content" class="space-y-2 text-xs text-slate-300">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Status:</span>
+                                    <span id="rag-status" class="font-medium text-green-400">Ready</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Indexed Chunks:</span>
+                                    <span id="rag-chunks" class="font-medium">0</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Context Size:</span>
+                                    <span id="rag-context-size" class="font-medium">0 chars</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">AI Model:</span>
+                                    <span id="rag-model" class="font-medium">Not set</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Retrieval Mode:</span>
+                                    <span id="rag-retrieval" class="font-medium">Smart (Overlapping)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Conversation:</span>
+                                    <span id="rag-history" class="font-medium">0 messages</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="chat-container" class="flex-1 overflow-y-auto scroll-container p-6 space-y-6 min-h-[300px] lg:min-h-0">
                             </div>
                         <div class="p-4 sm:p-6 border-t border-slate-600/30">
