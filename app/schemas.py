@@ -1,5 +1,12 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+
+
+class ConversationMessage(BaseModel):
+    """Schema for a single message in the conversation history"""
+    role: str = Field(..., description="Role of the message sender ('user' or 'assistant')")
+    content: str = Field(..., description="Content of the message")
+
 
 class DocumentRequest(BaseModel):
     """
@@ -11,6 +18,7 @@ class DocumentRequest(BaseModel):
         description="The full document or text to be indexed."
     )
 
+
 class ChatRequest(BaseModel):
     """
     Schema for the request to generate a response.
@@ -19,6 +27,10 @@ class ChatRequest(BaseModel):
         ...,
         min_length=2,
         description="The user's question to be answered based on the indexed context."
+    )
+    conversation_history: Optional[List[ConversationMessage]] = Field(
+        default=None,
+        description="Optional conversation history for context-aware responses"
     )
 
 class TaskRequest(BaseModel):

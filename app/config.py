@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     MAX_TOKENS_TEST: int = 50  # For API key testing
 
     # Context Limits
-    MAX_CONTEXT_LENGTH_CHAT: int = 8000  # For chat context
-    MAX_CONTEXT_LENGTH_TASK: int = 12000  # For task context
-    MAX_CHUNKS_RETRIEVE: int = 3  # Number of chunks to retrieve
+    MAX_CONTEXT_LENGTH_CHAT: int = 10000  # For chat context (increased for better context)
+    MAX_CONTEXT_LENGTH_TASK: int = 15000  # For task context (increased for better context)
+    MAX_CHUNKS_RETRIEVE: int = 4  # Number of chunks to retrieve (increased with overlapping chunks)
 
     # Performance Settings
     REQUEST_TIMEOUT_BASE: int = 120  # Base timeout in seconds

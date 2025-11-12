@@ -677,9 +677,56 @@ async def _process_rtf_file(file_content: bytes) -> str:
         raise HTTPException(status_code=400, detail=f"Could not process RTF file: {str(e)}")
 
 
+def _create_overlapping_chunks(text: str, chunk_size: int = 500, overlap: int = 100) -> list:
+    """
+    Create overlapping text chunks for better context preservation.
+
+    Args:
+        text: The text to chunk
+        chunk_size: Size of each chunk in characters
+        overlap: Number of characters to overlap between chunks
+
+    Returns:
+        List of text chunks with overlap
+    """
+    chunks = []
+    start = 0
+    text_length = len(text)
+
+    while start < text_length:
+        # Define the end of the current chunk
+        end = start + chunk_size
+
+        # If this is not the last chunk, try to break at a sentence or word boundary
+        if end < text_length:
+            # Look for sentence boundaries (., !, ?)
+            sentence_end = max(
+                text.rfind('.', start, end),
+                text.rfind('!', start, end),
+                text.rfind('?', start, end)
+            )
+
+            if sentence_end > start + chunk_size // 2:  # If found in reasonable position
+                end = sentence_end + 1
+            else:
+                # Fall back to word boundary
+                space_pos = text.rfind(' ', start, end)
+                if space_pos > start + chunk_size // 2:
+                    end = space_pos
+
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+
+        # Move start position with overlap
+        start = end - overlap if end < text_length else text_length
+
+    return chunks
+
+
 def index_document(request_data: DocumentRequest) -> int:
     logger.info("=" * 80)
-    logger.info("📚 STARTING DOCUMENT INDEXING PROCESS")
+    logger.info("📚 STARTING ENHANCED DOCUMENT INDEXING PROCESS")
     logger.info("=" * 80)
 
     # Log the incoming context
@@ -698,47 +745,40 @@ def index_document(request_data: DocumentRequest) -> int:
         else:
             logger.info("📂 No existing documents to clear.")
 
-        # Step 2: Chunk document with better chunking strategy
-        text_chunks = textwrap.wrap(
+        # Step 2: Enhanced chunking with overlap for better context preservation
+        logger.info("✂️  Creating overlapping chunks for better context continuity...")
+        text_chunks = _create_overlapping_chunks(
             request_data.context,
-            width=600,
-            break_long_words=False,
-            replace_whitespace=False,
-            break_on_hyphens=False
+            chunk_size=500,  # Optimal size for retrieval
+            overlap=100  # 20% overlap for context preservation
         )
-
-        # If chunks are still too few, try splitting on sentences/paragraphs
-        if len(text_chunks) < 3 and len(request_data.context) > 1200:
-            logger.info("🔧 Using sentence-based chunking for better granularity")
-            paragraphs = request_data.context.split('\n\n')
-            text_chunks = []
-
-            for para in paragraphs:
-                para = para.strip()
-                if not para:
-                    continue
-
-                if len(para) <= 600:
-                    text_chunks.append(para)
-                else:
-                    sub_chunks = textwrap.wrap(para, width=600, break_long_words=False)
-                    text_chunks.extend(sub_chunks)
-
-        # Filter out empty chunks
-        text_chunks = [chunk.strip() for chunk in text_chunks if chunk.strip()]
 
         if not text_chunks:
             logger.warning("⚠️  No text chunks were generated.")
             return 0
 
-        logger.info(f"✂️  Document split into {len(text_chunks)} chunks")
+        logger.info(f"✅ Document split into {len(text_chunks)} overlapping chunks")
 
-        # Step 3: Add chunks to ChromaDB
-        chunk_ids = [f"doc_chunk_{i}_{int(time.time())}" for i in range(len(text_chunks))]
-        logger.info(f"💾 Adding {len(chunk_ids)} chunks to ChromaDB...")
+        # Log chunk statistics
+        avg_chunk_size = sum(len(chunk) for chunk in text_chunks) / len(text_chunks)
+        logger.info(f"📊 Average chunk size: {avg_chunk_size:.0f} characters")
 
-        # Add documents with metadata
-        metadatas = [{"chunk_index": i, "timestamp": int(time.time())} for i in range(len(text_chunks))]
+        # Step 3: Add chunks to ChromaDB with enhanced metadata
+        timestamp = int(time.time())
+        chunk_ids = [f"doc_chunk_{i}_{timestamp}" for i in range(len(text_chunks))]
+        logger.info(f"💾 Adding {len(chunk_ids)} chunks to ChromaDB with enhanced metadata...")
+
+        # Enhanced metadata for better retrieval
+        metadatas = [
+            {
+                "chunk_index": i,
+                "timestamp": timestamp,
+                "chunk_length": len(chunk),
+                "position": "start" if i == 0 else "end" if i == len(text_chunks) - 1 else "middle",
+                "total_chunks": len(text_chunks)
+            }
+            for i, chunk in enumerate(text_chunks)
+        ]
 
         rag_setup.collection.add(
             documents=text_chunks,
@@ -746,8 +786,9 @@ def index_document(request_data: DocumentRequest) -> int:
             metadatas=metadatas
         )
 
-        logger.info("✅ DOCUMENT INDEXING COMPLETED SUCCESSFULLY")
+        logger.info("✅ ENHANCED DOCUMENT INDEXING COMPLETED SUCCESSFULLY")
         logger.info(f"📊 Total chunks indexed: {len(text_chunks)}")
+        logger.info(f"🔗 Chunks have 100-char overlap for better context continuity")
         logger.info("=" * 80)
 
         return len(text_chunks)
@@ -774,30 +815,78 @@ def clear_index():
         raise
 
 
+def _expand_query(query: str) -> list:
+    """
+    Expand the query with synonyms and related terms for better retrieval.
+    Returns list of query variations.
+    """
+    queries = [query]
+
+    # Add query without question words for better matching
+    question_words = ['what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'can', 'do', 'does']
+    words = query.lower().split()
+    filtered_words = [w for w in words if w not in question_words and len(w) > 2]
+
+    if len(filtered_words) >= 2:
+        # Create a version with just the key terms
+        key_terms_query = ' '.join(filtered_words)
+        if key_terms_query != query.lower():
+            queries.append(key_terms_query)
+
+    return queries[:2]  # Limit to 2 variations to avoid too many retrievals
+
+
+def _deduplicate_and_rank_chunks(chunks_list: list, metadatas_list: list) -> tuple:
+    """
+    Deduplicate chunks and rank them by relevance.
+    Returns (unique_chunks, unique_metadatas)
+    """
+    seen = set()
+    unique_chunks = []
+    unique_metadatas = []
+
+    for chunks, metadatas in zip(chunks_list, metadatas_list):
+        for chunk, metadata in zip(chunks, metadatas):
+            # Use first 100 chars as fingerprint
+            fingerprint = chunk[:100]
+            if fingerprint not in seen:
+                seen.add(fingerprint)
+                unique_chunks.append(chunk)
+                unique_metadatas.append(metadata)
+
+    return unique_chunks, unique_metadatas
+
+
 async def get_rag_response(request_data: ChatRequest, api_key: Optional[str] = None) -> str:
     """
-    Performs the RAG pipeline: checks cache, retrieves context, generates a response.
-    Uses provided API key or falls back to default.
+    Enhanced RAG pipeline with conversation history, query expansion, and better retrieval.
     """
     start_total = time.time()
 
     logger.info("=" * 80)
-    logger.info("🤖 STARTING RAG PIPELINE")
+    logger.info("🤖 STARTING ENHANCED RAG PIPELINE")
     logger.info("=" * 80)
     logger.info(f"❓ USER PROMPT: '{request_data.prompt}'")
     logger.info(f"📏 Prompt length: {len(request_data.prompt)} characters")
+    logger.info(f"💬 Conversation history: {len(request_data.conversation_history or [])} messages")
     logger.info(f"🔑 Using custom API key: {'Yes' if api_key else 'No'}")
     logger.info("-" * 60)
 
     try:
-        # Step 1: Check cache for a recent, identical query
-        cache_key = f"{api_key or 'default'}:{request_data.prompt}"
+        # Step 1: Build cache key including conversation context
+        history_hash = ""
+        if request_data.conversation_history:
+            # Create a hash of recent conversation for cache key
+            recent_msgs = request_data.conversation_history[-3:]  # Last 3 messages
+            history_hash = str(hash("".join([m.content[:50] for m in recent_msgs])))
+
+        cache_key = f"{api_key or 'default'}:{history_hash}:{request_data.prompt}"
         cached_response = _get_cached_response(cache_key)
         if cached_response:
             logger.info("💾 CACHE HIT! Returning cached response.")
-            return f"{cached_response}\n\n(This response was retrieved from cache)"
+            return cached_response
 
-        logger.info("🔍 Cache miss. Proceeding with RAG pipeline.")
+        logger.info("🔍 Cache miss. Proceeding with enhanced RAG pipeline.")
 
         # Step 2: Check if the vector database has any content
         doc_count = rag_setup.collection.count()
@@ -807,23 +896,44 @@ async def get_rag_response(request_data: ChatRequest, api_key: Optional[str] = N
             logger.warning("⚠️  Vector DB is empty. Cannot answer query.")
             return "I don't have any specific context loaded right now. Please provide some context in the Knowledge Base and click 'Index Context' before asking questions. However, I'd be happy to help with general questions using my built-in knowledge!"
 
-        # Step 3: Retrieve relevant chunks from ChromaDB
-        logger.info("🔎 Retrieving relevant chunks from vector DB...")
-        retrieved_chunks = await _retrieve_chunks_async(
-            request_data.prompt,
-            n_results=settings.MAX_CHUNKS_RETRIEVE
-        )
+        # Step 3: Query expansion for better retrieval
+        logger.info("🔍 Expanding query for better retrieval...")
+        query_variations = _expand_query(request_data.prompt)
+        logger.info(f"📝 Generated {len(query_variations)} query variations")
 
-        if not retrieved_chunks or not retrieved_chunks.get('documents') or not retrieved_chunks['documents'][0]:
+        # Step 4: Retrieve chunks for each query variation
+        all_chunks = []
+        all_metadatas = []
+
+        for query_var in query_variations:
+            logger.info(f"🔎 Retrieving chunks for: '{query_var[:50]}...'")
+            retrieved = await _retrieve_chunks_async(
+                query_var,
+                n_results=settings.MAX_CHUNKS_RETRIEVE + 2  # Retrieve more for better ranking
+            )
+
+            if retrieved and retrieved.get('documents') and retrieved['documents'][0]:
+                all_chunks.append(retrieved['documents'][0])
+                all_metadatas.append(retrieved.get('metadatas', [[]])[0])
+
+        if not all_chunks:
             logger.warning("❌ No relevant chunks found in the vector DB for this query.")
             return "I couldn't find specific information about that in the provided context. Let me help you with what I know from my general knowledge:\n\n" + await _generate_fallback_response(
                 request_data.prompt, api_key)
 
-        # Log retrieved chunks
-        chunks = retrieved_chunks['documents'][0]
-        logger.info(f"📋 Retrieved {len(chunks)} relevant chunks")
+        # Step 5: Deduplicate and rank chunks
+        logger.info("🎯 Deduplicating and ranking retrieved chunks...")
+        unique_chunks, unique_metadatas = _deduplicate_and_rank_chunks(all_chunks, all_metadatas)
 
-        context_for_prompt = "\n\n---\n\n".join(chunks)
+        # Limit to best chunks
+        final_chunks = unique_chunks[:settings.MAX_CHUNKS_RETRIEVE + 1]
+        logger.info(f"📋 Using {len(final_chunks)} unique, ranked chunks for context")
+
+        # Log chunk details
+        for i, (chunk, meta) in enumerate(zip(final_chunks, unique_metadatas[:len(final_chunks)])):
+            logger.info(f"   Chunk {i + 1}: {len(chunk)} chars, position: {meta.get('position', 'unknown')}")
+
+        context_for_prompt = "\n\n---\n\n".join(final_chunks)
 
         # Limit context length to prevent timeouts
         max_context_length = settings.MAX_CONTEXT_LENGTH_CHAT
@@ -831,39 +941,65 @@ async def get_rag_response(request_data: ChatRequest, api_key: Optional[str] = N
             logger.warning(f"⚠️  Context too long, truncating to {max_context_length}")
             context_for_prompt = context_for_prompt[:max_context_length] + "\n\n[... content truncated ...]"
 
-        # Step 4: Construct improved prompt for the LLM
+        # Step 6: Build conversation history context
+        history_context = ""
+        if request_data.conversation_history and len(request_data.conversation_history) > 0:
+            logger.info(f"💬 Including {len(request_data.conversation_history)} previous messages for context")
+            history_messages = request_data.conversation_history[-6:]  # Last 6 messages (3 exchanges)
+            history_parts = []
+            for msg in history_messages:
+                role_label = "User" if msg.role == "user" else "Assistant"
+                # Truncate very long messages
+                content = msg.content[:300] + "..." if len(msg.content) > 300 else msg.content
+                history_parts.append(f"{role_label}: {content}")
+
+            history_context = (
+                "\n\nPREVIOUS CONVERSATION:\n"
+                + "\n".join(history_parts)
+                + "\n"
+            )
+
+        # Step 7: Construct enhanced prompt with conversation history
         full_prompt = (
-            "You are an intelligent assistant with access to specific context information. "
-            "Your goal is to provide comprehensive, helpful answers that combine the provided context with your expertise.\n\n"
+            "You are an intelligent assistant with access to specific context information and conversation history. "
+            "Your goal is to provide comprehensive, helpful answers that:\n"
+            "• Take into account the previous conversation flow\n"
+            "• Use the provided context as your PRIMARY source when relevant\n"
+            "• Build naturally on previous exchanges\n"
+            "• Provide coherent, contextually appropriate responses\n\n"
 
             "INSTRUCTIONS:\n"
-            "• Use the provided context as your PRIMARY source when it's relevant\n"
-            "• If the context fully answers the question, focus on that information and enhance it with practical insights\n"
-            "• If the context only partially addresses the question, build upon it with your knowledge\n"
-            "• If the context isn't relevant to the question, briefly mention this and provide a helpful answer based on your expertise\n"
-            "• Be natural and conversational - avoid robotic phrases like 'based solely on the context'\n"
-            "• Provide actionable, practical advice when appropriate\n"
-            "• Structure your response clearly with headings or bullet points when helpful\n\n"
-
-            "CONTEXT INFORMATION:\n"
-            f"{context_for_prompt}\n\n"
-
-            f"USER QUESTION: {request_data.prompt}\n\n"
-
-            "Please provide a comprehensive, helpful response:"
+            "• Reference previous conversation when relevant for continuity\n"
+            "• Use the document context as your primary source for factual information\n"
+            "• If the user asks follow-up questions, refer back to previous answers\n"
+            "• Be natural and conversational - maintain the conversation flow\n"
+            "• Provide detailed, well-structured responses\n"
+            "• If information isn't in the context, acknowledge it and provide general knowledge help\n"
         )
 
-        # Step 5: Generate the response using the LLM
-        logger.info("🧠 Generating response from OpenRouter...")
+        if history_context:
+            full_prompt += history_context + "\n"
+
+        full_prompt += (
+            "DOCUMENT CONTEXT:\n"
+            f"{context_for_prompt}\n\n"
+
+            f"CURRENT USER QUESTION: {request_data.prompt}\n\n"
+
+            "Please provide a comprehensive, contextually appropriate response:"
+        )
+
+        # Step 8: Generate the response using the LLM
+        logger.info("🧠 Generating response with conversation context...")
         response_text = await _generate_response_async(full_prompt, api_key)
 
-        # Step 6: Cache the newly generated response
+        # Step 9: Cache the newly generated response
         _cache_response(cache_key, response_text)
         logger.info("💾 Response cached for future use")
 
         total_time = time.time() - start_total
         logger.info(f"⏱️  Total processing time: {total_time:.2f}s")
-        logger.info("✅ RAG PIPELINE COMPLETED SUCCESSFULLY")
+        logger.info("✅ ENHANCED RAG PIPELINE COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
 
         return response_text

@@ -9,6 +9,7 @@ class ContextAwareApp {
             chatContainer: document.getElementById('chat-container'),
             statusIndicator: document.getElementById('status-indicator'),
             clearContextBtn: document.getElementById('clear-context-btn'),
+            clearHistoryBtn: document.getElementById('clear-history-btn'),
             indexContextBtn: document.getElementById('index-context-btn'),
             taskSelect: document.getElementById('task-select'),
             charCount: document.getElementById('char-count'),
@@ -50,6 +51,7 @@ class ContextAwareApp {
             isTestingApiKey: false,
             userApiKey: '',
             provider: 'openrouter', // Default provider
+            conversationHistory: [], // Track conversation for context-aware responses
             // Collapse states for mobile view
             apiSectionCollapsed: false,
             kbSectionCollapsed: false,
@@ -91,6 +93,7 @@ class ContextAwareApp {
     addEventListeners() {
         this.elements.indexContextBtn.addEventListener('click', () => this.handleIndexContext());
         this.elements.clearContextBtn.addEventListener('click', () => this.handleClearContext());
+        this.elements.clearHistoryBtn.addEventListener('click', () => this.clearConversationHistory());
         this.elements.sendButton.addEventListener('click', () => this.handleSubmit());
         this.elements.chatInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -499,7 +502,7 @@ class ContextAwareApp {
     }
 
     /**
-     * Handles sending a user's prompt to the backend for a response.
+     * Handles sending a user's prompt to the backend for a response with conversation history.
      */
     async handleSendPrompt() {
         const prompt = this.elements.chatInput.value.trim();
@@ -510,25 +513,32 @@ class ContextAwareApp {
             return;
         }
 
+        // Add user message to chat and conversation history
         this.addMessageToChat(prompt, 'user');
+        this.state.conversationHistory.push({ role: 'user', content: prompt });
+
         this.elements.chatInput.value = '';
         this.autoResizeTextarea(this.elements.chatInput);
 
         this.state.isGenerating = true;
         this.updateUI();
-        this.showStatus('AI is thinking...', 'loading');
+        this.showStatus('AI is thinking with full conversation context...', 'loading');
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            const timeoutId = setTimeout(() => controller.abort(), 90000); // Increased timeout for better responses
 
+            // Send prompt with conversation history for context-aware responses
             const response = await fetch('/api/v1/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-API-Key': this.state.userApiKey
                 },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({
+                    prompt,
+                    conversation_history: this.state.conversationHistory.slice(-20) // Last 20 messages (10 exchanges)
+                }),
                 signal: controller.signal
             });
 
@@ -536,7 +546,15 @@ class ContextAwareApp {
             const result = await response.json();
             if (!response.ok) throw new Error(result.detail || 'An unknown error occurred.');
 
+            // Add AI response to chat and conversation history
             this.addMessageToChat(result.response, 'ai');
+            this.state.conversationHistory.push({ role: 'assistant', content: result.response });
+
+            // Limit history size to prevent memory issues (keep last 40 messages = 20 exchanges)
+            if (this.state.conversationHistory.length > 40) {
+                this.state.conversationHistory = this.state.conversationHistory.slice(-40);
+            }
+
             this.showStatus('Ready for your next question.', 'success');
         } catch (error) {
             console.error('Generation error:', error);
@@ -627,6 +645,22 @@ class ContextAwareApp {
             this.showStatus(`Error clearing index: ${error.message}`, 'error');
         } finally {
             this.updateUI();
+        }
+    }
+
+    /**
+     * Clear conversation history for a fresh start
+     */
+    clearConversationHistory() {
+        if (this.state.conversationHistory.length === 0) {
+            this.showStatus('Conversation history is already empty.', 'success');
+            return;
+        }
+
+        if (confirm(`Clear ${this.state.conversationHistory.length} message(s) from conversation history?\n\nThis will reset the AI's memory of the conversation.`)) {
+            this.state.conversationHistory = [];
+            this.showStatus('Conversation history cleared. The AI will start fresh.', 'success');
+            this.addMessageToChat('💭 **Conversation history cleared.** I\'ll start fresh with your next question!', 'system');
         }
     }
 
