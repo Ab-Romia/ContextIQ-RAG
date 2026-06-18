@@ -48,7 +48,16 @@ async def stream_answer(
     api_key: str,
     model: str | None = None,
 ) -> AsyncIterator[str]:
-    client = AsyncOpenAI(api_key=api_key, base_url=settings.openrouter_base_url)
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=settings.openrouter_base_url,
+        # OpenRouter uses these to attribute and route requests; they are optional but
+        # recommended and can help free-tier routing.
+        default_headers={
+            "HTTP-Referer": "https://github.com/Ab-Romia/ContextIQ-RAG",
+            "X-Title": "ContextIQ",
+        },
+    )
     stream = await client.chat.completions.create(
         model=model or settings.default_model,
         messages=build_messages(query, citations),

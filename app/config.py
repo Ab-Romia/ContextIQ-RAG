@@ -19,7 +19,12 @@ class Settings(BaseSettings):
     # stored server side. base_url points at an OpenAI compatible endpoint; OpenRouter
     # is the default because its free tier lets the live demo run without a credit card.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    default_model: str = "deepseek/deepseek-r1-0528:free"
+    # A standard instruction-following chat model, not a reasoning model. Reasoning models
+    # on OpenRouter put their chain of thought in a separate field and do not stream their
+    # answer reliably, which leaves the response looking empty. Llama 3.3 70B Instruct is a
+    # widely available free model that streams cleanly and follows the grounding and
+    # citation instructions well.
+    default_model: str = "meta-llama/llama-3.3-70b-instruct:free"
     max_output_tokens: int = 1024
     temperature: float = 0.2
 
