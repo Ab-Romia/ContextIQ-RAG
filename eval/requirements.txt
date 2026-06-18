@@ -1,0 +1,5 @@
+# Evaluation-only dependencies. These are NOT installed in the application image; they
+# exist so the TF-IDF baseline arm can be reproduced. Install on top of the app
+# requirements to run the ablation:
+#     pip install -r requirements.txt -r eval/requirements.txt
+scikit-learn~=1.5

@@ -1,0 +1,49 @@
+{
+  "config": {
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "reranker_model": "Xenova/ms-marco-MiniLM-L-6-v2",
+    "chunk_tokens": 400,
+    "overlap_tokens": 60,
+    "retrieve_k": 50,
+    "rrf_k": 60,
+    "n_answerable": 18,
+    "n_total": 21,
+    "chunks": 99
+  },
+  "arms": {
+    "A": {
+      "label": "TF-IDF baseline",
+      "hit@3": 0.7778,
+      "hit@5": 0.8889,
+      "recall@5": 0.8889,
+      "mrr": 0.8079,
+      "ndcg@5": 0.8208
+    },
+    "B": {
+      "label": "Dense only",
+      "hit@3": 0.6667,
+      "hit@5": 0.7222,
+      "recall@5": 0.7222,
+      "mrr": 0.5725,
+      "ndcg@5": 0.5843
+    },
+    "C": {
+      "label": "Hybrid (dense + BM25, RRF)",
+      "hit@3": 0.7778,
+      "hit@5": 0.9444,
+      "recall@5": 0.9444,
+      "mrr": 0.5986,
+      "ndcg@5": 0.6793
+    },
+    "D": {
+      "label": "Hybrid + rerank",
+      "hit@3": 0.8333,
+      "hit@5": 0.8889,
+      "recall@5": 0.8889,
+      "mrr": 0.7839,
+      "ndcg@5": 0.8017
+    }
+  },
+  "judge": null
+}
+
