@@ -5,15 +5,19 @@ keep the event loop free. Generation is streamed over Server-Sent Events: the cl
 first receives a `trace` event describing what retrieval did, then a sequence of `token`
 events as the answer is written, then `done`. Errors during generation arrive as an
 `error` event rather than a broken stream, and the API key is never echoed back.
+
+The SSE framing is written by hand rather than pulled from a library: the format is a
+few lines of text, so keeping it here avoids an extra dependency and makes the wire
+format obvious to anyone reading the code.
 """
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, File, Request, UploadFile
-from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from . import generate, ingest
@@ -60,8 +64,12 @@ async def clear(request: Request) -> dict[str, str]:
     return {"status": "cleared"}
 
 
+def _sse(event: str, data: Any) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
 @router.post("/api/generate")
-async def generate_answer(request: Request, body: GenerateRequest) -> EventSourceResponse:
+async def generate_answer(request: Request, body: GenerateRequest) -> StreamingResponse:
     pipeline = _pipeline(request)
     rerank_enabled = True if body.rerank is None else body.rerank
 
@@ -70,19 +78,19 @@ async def generate_answer(request: Request, body: GenerateRequest) -> EventSourc
     )
 
     async def events():
-        yield {"event": "trace", "data": json.dumps(trace.model_dump())}
+        yield _sse("trace", trace.model_dump())
         try:
             async for delta in generate.stream_answer(
                 body.query, citations, api_key=body.api_key, model=body.model
             ):
-                yield {"event": "token", "data": json.dumps({"text": delta})}
+                yield _sse("token", {"text": delta})
         except Exception as exc:  # surface provider/auth errors without leaking the key
-            yield {"event": "error", "data": json.dumps({"detail": _safe_error(str(exc))})}
+            yield _sse("error", {"detail": _safe_error(str(exc))})
             return
-        yield {"event": "done", "data": "{}"}
+        yield _sse("done", {})
 
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    return EventSourceResponse(events(), headers=headers)
+    return StreamingResponse(events(), media_type="text/event-stream", headers=headers)
 
 
 def _safe_error(message: str) -> str:

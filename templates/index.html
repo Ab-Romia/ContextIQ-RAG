@@ -1,270 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ContextIQ - Intelligent Context-Aware Assistant</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { 'inter': ['Inter', 'sans-serif'] },
-                    animation: {
-                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'fade-in': 'fadeIn 0.5s ease-in-out',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' }
-                        },
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        /* General styling for a modern look and feel */
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            overflow-x: hidden; /* Prevent horizontal scroll */
-        }
-        .glass-effect {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(148, 163, 184, 0.1);
-        }
-        .gradient-text {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Custom scrollbar for a cleaner UI */
-        .scroll-container::-webkit-scrollbar { width: 6px; }
-        .scroll-container::-webkit-scrollbar-track { background: transparent; }
-        .scroll-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-
-        /* Styling for markdown content rendered by marked.js */
-        .markdown-content { word-wrap: break-word; }
-        .markdown-content p { margin-bottom: 0.75rem; }
-        .markdown-content p:last-child { margin-bottom: 0; }
-        .markdown-content pre { background-color: rgba(15, 23, 42, 0.5); padding: 0.75rem; border-radius: 0.375rem; overflow-x: auto; }
-        .markdown-content code { font-family: monospace; background-color: rgba(15, 23, 42, 0.5); padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
-        .markdown-content pre code { padding: 0; background-color: transparent; }
-        .markdown-content ul, .markdown-content ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
-        .markdown-content ul { list-style-type: disc; }
-        .markdown-content ol { list-style-type: decimal; }
-        .markdown-content table { border-collapse: collapse; width: 100%; margin-bottom: 0.75rem; }
-        .markdown-content th, .markdown-content td { border: 1px solid rgba(148, 163, 184, 0.2); padding: 0.5rem; text-align: left; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ContextIQ</title>
+  <meta name="description" content="A hybrid-retrieval RAG worked example that runs on CPU." />
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body class="font-inter text-white">
-    <div class="fixed inset-0 -z-10">
-        <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
-        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow animation-delay-2000"></div>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>ContextIQ</h1>
+      <p class="tagline">A hybrid-retrieval RAG worked example that runs on CPU.</p>
+      <a class="repo-link" href="https://github.com/Ab-Romia/ContextIQ-RAG" target="_blank" rel="noopener">View the source</a>
     </div>
+  </header>
 
-    <div class="relative z-10 flex items-center justify-center min-h-screen p-2 sm:p-4">
-        <div class="w-full max-w-7xl min-h-[95vh] glass-effect rounded-3xl shadow-2xl flex flex-col">
-
-            <header class="flex items-center justify-between p-4 sm:p-6 border-b border-slate-600/50 flex-wrap">
-                <div class="flex items-center space-x-4">
-                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    </div>
-                    <div>
-                        <h1 class="text-xl sm:text-2xl font-bold gradient-text">Context AI by Ab-Romia</h1>
-                        <p class="text-xs sm:text-sm text-slate-400">Abdelrahman Abouroumia...</p>
-                    </div>
-                </div>
-
-                <div id="api-status" class="flex items-center space-x-2 mt-2 sm:mt-0">
-                    <div id="api-status-icon" class="w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></div>
-                    <span id="api-status-text" class="text-sm text-slate-400">API Key Required</span>
-                </div>
-            </header>
-
-            <div id="api-key-section" class="p-4 sm:p-6 border-b border-slate-600/30 bg-slate-800/30">
-                <div id="toggle-api-section" class="flex items-center justify-between cursor-pointer">
-                    <div>
-                        <h3 class="text-lg font-semibold text-slate-200">🔑 API Configuration</h3>
-                        <p class="text-sm text-slate-400">Enter your OpenRouter API key to use the assistant</p>
-                    </div>
-                    <button class="text-slate-400 hover:text-slate-200 transition-transform duration-300">
-                        <svg id="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M6 9l6 6 6-6"/>
-                        </svg>
-                    </button>
-                </div>
-
-                <div id="api-key-content" class="space-y-4 mt-4">
-                    <div class="mb-3">
-                        <label for="provider-select" class="block text-sm font-medium text-slate-300 mb-2">Choose AI Provider:</label>
-                        <select id="provider-select" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                            <option value="openrouter">OpenRouter (Free & Multiple Models)</option>
-                            <option value="openai">OpenAI (GPT-4, GPT-3.5, etc.)</option>
-                        </select>
-                    </div>
-
-                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                        <input
-                            type="password"
-                            id="api-key-input"
-                            placeholder="Enter your API key here..."
-                            class="flex-1 bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
-                        >
-                        <div class="flex space-x-2">
-                            <button id="test-api-key" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                Test Key
-                            </button>
-                            <button id="save-api-key" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                Save
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="provider-info" class="text-xs text-slate-400 space-y-1">
-                        <p id="provider-link">• Get your free API key from <a href="https://openrouter.ai/" target="_blank" class="text-indigo-400 hover:text-indigo-300">openrouter.ai</a></p>
-                        <p>• Your API key is stored locally in your browser and never sent to our servers</p>
-                        <p id="provider-models">• OpenRouter provides access to 200+ models including Claude, GPT, Gemini, and more</p>
-                    </div>
-
-                    <div id="api-key-status" class="hidden p-3 rounded-lg text-sm"></div>
-                </div>
-            </div>
-
-            <div class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
-                <div class="w-full lg:w-1/2 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-600/50">
-                    <div id="kb-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
-                        <h2 class="text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
-                        <svg id="kb-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                    </div>
-
-                    <div id="kb-content" class="flex-1 p-4 sm:p-6 flex flex-col lg:flex">
-                        <h2 class="hidden lg:block text-lg font-semibold text-slate-200">📚 Knowledge Base</h2>
-                        <p class="hidden lg:block text-sm text-slate-400 mt-1 mb-4">Provide context for the AI to learn from.</p>
-
-                        <div class="mb-4">
-                            <label for="file-input" class="block text-sm font-medium text-slate-300 mb-2">Upload a document:</label>
-                            <div class="flex items-center space-x-2">
-                                <input type="file" id="file-input" class="hidden" accept=".txt,.pdf,.docx,.pptx,.xlsx,.xls,.csv,.json,.xml,.html,.htm,.md,.markdown,.rtf">
-                                <label for="file-input" class="flex-1 cursor-pointer bg-slate-900/50 border border-slate-600/50 rounded-lg p-2 text-slate-400 hover:bg-slate-800/50 transition truncate">
-                                    <span id="file-name" class="text-slate-400">Choose a file...</span>
-                                </label>
-                            </div>
-                            <div class="text-xs text-slate-500 mt-2 space-y-1">
-                                <p>📄 <strong>Supported formats:</strong></p>
-                                <p>• <strong>Text:</strong> .txt, .md, .rtf</p>
-                                <p>• <strong>Documents:</strong> .pdf, .docx</p>
-                                <p>• <strong>Presentations:</strong> .pptx</p>
-                                <p>• <strong>Data:</strong> .xlsx, .csv, .json, .xml</p>
-                                <p>• <strong>Web:</strong> .html</p>
-                                <p class="text-slate-400 italic">Uploading a file will replace the text in the text area below.</p>
-                            </div>
-                        </div>
-
-                        <div class="flex-1 flex flex-col">
-                           <textarea id="context-input" class="w-full flex-1 bg-slate-900/50 border border-slate-600/50 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition scroll-container min-h-[250px] lg:min-h-0" placeholder="... or paste your documents, meeting notes, or any relevant context here"></textarea>
-                        </div>
-                        <div class="mt-4 flex items-center justify-between">
-                            <div class="text-xs text-slate-400">
-                                Chars: <span id="char-count">0</span> | Words: <span id="word-count">0</span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <button id="clear-context-btn" class="px-3 py-1.5 text-sm bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors">Clear</button>
-                                <button id="index-context-btn" class="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Index Context</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="w-full lg:w-1/2 flex flex-col">
-                    <div id="assistant-header" class="p-4 sm:p-6 border-b border-slate-600/30 flex justify-between items-center lg:hidden cursor-pointer">
-                        <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
-                        <svg id="assistant-toggle-icon" class="w-5 h-5 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                    </div>
-
-                    <div id="assistant-content" class="flex-1 flex flex-col lg:flex lg:overflow-hidden">
-                        <div class="hidden lg:block p-6 border-b border-slate-600/30">
-                            <h2 class="text-lg font-semibold text-slate-200">🤖 AI Assistant</h2>
-                            <p class="text-sm text-slate-400 mt-1">Ask questions or select a task.</p>
-                        </div>
-                         <div class="p-4 sm:p-6 border-b border-slate-600/30">
-                            <label for="task-select" class="block text-sm font-medium text-slate-300 mb-2">Choose an Action:</label>
-                            <select id="task-select" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2 text-slate-200 focus:ring-2 focus:ring-indigo-500">
-                                <option value="q_and_a">Question & Answer</option>
-                                <option value="summarize">Summarize</option>
-                                <option value="plan">Generate Action Plan</option>
-                                <option value="creative">Creative Writing</option>
-                            </select>
-                        </div>
-
-                        <!-- RAG System Info Panel -->
-                        <div id="rag-info-panel" class="hidden p-4 sm:p-4 border-b border-slate-600/30 bg-slate-900/30">
-                            <div class="flex items-center justify-between mb-3">
-                                <h3 class="text-sm font-semibold text-indigo-400">📊 RAG System Info</h3>
-                                <button id="toggle-rag-info" class="text-xs text-slate-400 hover:text-slate-300">
-                                    <span id="rag-toggle-text">Hide</span>
-                                </button>
-                            </div>
-                            <div id="rag-info-content" class="space-y-2 text-xs text-slate-300">
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">Status:</span>
-                                    <span id="rag-status" class="font-medium text-green-400">Ready</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">Indexed Chunks:</span>
-                                    <span id="rag-chunks" class="font-medium">0</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">Context Size:</span>
-                                    <span id="rag-context-size" class="font-medium">0 chars</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">AI Model:</span>
-                                    <span id="rag-model" class="font-medium">Not set</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">Retrieval Mode:</span>
-                                    <span id="rag-retrieval" class="font-medium">Smart (Overlapping)</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-slate-400">Conversation:</span>
-                                    <span id="rag-history" class="font-medium">0 messages</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="chat-container" class="flex-1 overflow-y-auto scroll-container p-6 space-y-6 min-h-[300px] lg:min-h-0">
-                            </div>
-                        <div class="p-4 sm:p-6 border-t border-slate-600/30">
-                            <div class="relative">
-                                <textarea id="chat-input" rows="1" class="w-full bg-slate-900/50 border border-slate-600/50 rounded-xl p-3 pr-12 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none transition" placeholder="Ask a question or provide a prompt..." style="max-height: 120px;"></textarea>
-                                <button id="send-button" class="absolute right-2.5 bottom-2.5 p-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
-                                </button>
-                            </div>
-                            <div class="flex items-center justify-between mt-3 text-xs text-slate-400 h-5">
-                                <div id="status-indicator" class="hidden"></div>
-                                <button id="clear-history-btn" class="px-3 py-1 text-xs bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-600/50 transition-colors" title="Clear conversation history">
-                                    🗑️ Clear History
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  <main class="wrap layout">
+    <section class="col">
+      <div class="card">
+        <h2>Knowledge base</h2>
+        <p class="hint">Paste text or upload a document, then index it. Retrieval reads only from what you index here.</p>
+        <textarea id="doc-text" rows="8" placeholder="Paste a document to ground the answers in..."></textarea>
+        <div class="row">
+          <label class="file-button">
+            <input type="file" id="doc-file" hidden />
+            Upload file
+          </label>
+          <button id="index-btn" class="primary">Index</button>
+          <button id="clear-btn" class="ghost">Clear</button>
         </div>
-    </div>
+        <p id="kb-status" class="status" role="status">Nothing indexed yet.</p>
+      </div>
 
-    <script src="/static/app.js?v=2.2.1"></script>
+      <div class="card">
+        <h2>Generation</h2>
+        <p class="hint">Retrieval and reranking run without a key. A key is only needed to write the final answer.</p>
+        <label class="field">
+          <span>OpenRouter API key</span>
+          <input type="password" id="api-key" placeholder="sk-or-..." autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Model</span>
+          <input type="text" id="model" placeholder="deepseek/deepseek-r1-0528:free" />
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="rerank-toggle" checked />
+          <span>Cross-encoder reranking</span>
+        </label>
+        <p class="hint subtle">A free key works for the default model. The key is used for this request only and never leaves your browser except to call the provider.</p>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="card">
+        <h2>Ask</h2>
+        <div class="row">
+          <input type="text" id="query" placeholder="Ask a question about the indexed document..." />
+          <button id="ask-btn" class="primary">Ask</button>
+        </div>
+        <div id="answer" class="answer" aria-live="polite"></div>
+      </div>
+
+      <div class="card" id="trace-card" hidden>
+        <h2>Retrieval trace</h2>
+        <p class="hint">How each stage ranked the candidates for this question. Selected rows are the chunks sent to the model.</p>
+        <p id="trace-summary" class="trace-summary"></p>
+        <div class="table-scroll">
+          <table id="trace-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Source</th>
+                <th title="Rank from dense semantic search">Dense</th>
+                <th title="Rank from BM25 lexical search">BM25</th>
+                <th title="Reciprocal rank fusion score">RRF</th>
+                <th title="Cross-encoder rerank score">Rerank</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap site-footer">
+    <p>Dense embeddings, BM25, reciprocal rank fusion, and cross-encoder reranking. No GPU.</p>
+  </footer>
+
+  <script src="/static/app.js" defer></script>
 </body>
 </html>
