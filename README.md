@@ -14,25 +14,7 @@ This project implements the part that comes after the tutorial: hybrid retrieval
 
 ## How retrieval works
 
-```
-                 query
-                   |
-        +----------+----------+
-        |                     |
-   dense search          BM25 search
-  (bge-small ONNX)      (lexical, bm25s)
-        |                     |
-        +----------+----------+
-                   |
-        reciprocal rank fusion
-                   |
-        cross-encoder rerank
-        (MiniLM, top of pool)
-                   |
-        top passages + citations
-                   |
-         streamed, grounded answer
-```
+![ContextIQ retrieval pipeline: a query fans out to dense and BM25 search, the rankings are combined with reciprocal rank fusion, a cross-encoder reranks the pool, and the top passages become numbered citations for a streamed answer.](docs/architecture.svg)
 
 Indexing turns a document into overlapping, token-bounded chunks that carry their heading path. Before embedding, each chunk is prefixed with a short contextual header built from the document title and that heading path, so an isolated chunk still records where it came from.
 

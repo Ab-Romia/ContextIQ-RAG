@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .box { fill: #0f766e; rx: 10; }
+      .accent { fill: #047857; }
+      .pill { fill: #1e293b; }
+      .t { fill: #ffffff; font-size: 15px; font-weight: 600; }
+      .s { fill: #cbd5e1; font-size: 12px; }
+      .edge { stroke: #94a3b8; stroke-width: 2; fill: none; }
+      .lbl { fill: #64748b; font-size: 12px; font-style: italic; }
+    </style>
+  </defs>
+
+  <!-- query -->
+  <rect x="310" y="20" width="140" height="40" rx="20" class="pill"/>
+  <text x="380" y="45" text-anchor="middle" class="t">query</text>
+
+  <!-- fan out -->
+  <path class="edge" d="M380,60 L380,80 L190,80 L190,108" marker-end="url(#arrow)"/>
+  <path class="edge" d="M380,60 L380,80 L570,80 L570,108" marker-end="url(#arrow)"/>
+
+  <!-- dense -->
+  <rect x="70" y="110" width="240" height="64" rx="10" class="box"/>
+  <text x="190" y="138" text-anchor="middle" class="t">Dense search</text>
+  <text x="190" y="158" text-anchor="middle" class="s">bge-small embeddings, ONNX</text>
+
+  <!-- bm25 -->
+  <rect x="450" y="110" width="240" height="64" rx="10" class="box"/>
+  <text x="570" y="138" text-anchor="middle" class="t">BM25 search</text>
+  <text x="570" y="158" text-anchor="middle" class="s">lexical, bm25s</text>
+
+  <!-- fan in -->
+  <path class="edge" d="M190,174 L190,200 L380,200 L380,222" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,174 L570,200 L380,200" />
+
+  <!-- fusion -->
+  <rect x="240" y="224" width="280" height="64" rx="10" class="box"/>
+  <text x="380" y="252" text-anchor="middle" class="t">Reciprocal rank fusion</text>
+  <text x="380" y="272" text-anchor="middle" class="s">combine rankings, k = 60</text>
+
+  <path class="edge" d="M380,288 L380,322" marker-end="url(#arrow)"/>
+
+  <!-- rerank -->
+  <rect x="240" y="324" width="280" height="64" rx="10" class="box"/>
+  <text x="380" y="352" text-anchor="middle" class="t">Cross-encoder rerank</text>
+  <text x="380" y="372" text-anchor="middle" class="s">MiniLM, over a deep pool</text>
+
+  <path class="edge" d="M380,388 L380,422" marker-end="url(#arrow)"/>
+
+  <!-- citations -->
+  <rect x="240" y="424" width="280" height="48" rx="10" class="box"/>
+  <text x="380" y="453" text-anchor="middle" class="t">Top passages, numbered as citations</text>
+
+  <path class="edge" d="M380,472 L380,502" marker-end="url(#arrow)"/>
+
+  <!-- answer -->
+  <rect x="220" y="504" width="320" height="48" rx="10" class="accent"/>
+  <text x="380" y="533" text-anchor="middle" class="t">Streamed, grounded, cited answer</text>
+</svg>
