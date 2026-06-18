@@ -1,0 +1,2 @@
+# Development and test dependencies, on top of requirements.txt and eval/requirements.txt.
+pytest~=8.3

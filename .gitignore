@@ -1,4 +1,29 @@
-.env
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.env
 .venv/
+venv/
+
+# Editors
+.idea/
+.vscode/
+
+# Local model / data caches
+.cache/
+*.onnx
+
+# Stray build artifacts from earlier experiments
+core/
+document/
+
+# Evaluation run outputs that are regenerated locally
+eval/.cache/
+
+# Internal planning notes, never published
+docs/REBUILD_PLAN.md

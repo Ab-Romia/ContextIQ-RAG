@@ -1,321 +1,102 @@
-# 🧠 ContextIQ - Intelligent Context-Aware AI Assistant
+# ContextIQ
 
-<div align="center">
+A hybrid-retrieval RAG worked example that runs on CPU.
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-orange)](https://huggingface.co/spaces/Ab-Romia/Context-Aware-AI)
+[Live demo](https://huggingface.co/spaces/Ab-Romia/Context-Aware-AI) | [How it works](#how-retrieval-works) | [Evaluation](#evaluation)
 
-**A sophisticated RAG (Retrieval-Augmented Generation) application powered by multiple AI providers**
+ContextIQ indexes a document, retrieves the passages that answer a question, and writes a grounded, cited answer. It is built to be read as much as run: every stage of the pipeline is a small, separate module, and the interface shows you what retrieval did so the system is legible rather than magic.
 
-[Live Demo](https://huggingface.co/spaces/Ab-Romia/Context-Aware-AI) · [Report Bug](https://github.com/Ab-Romia/ContextIQ-RAG/issues) · [Request Feature](https://github.com/Ab-Romia/ContextIQ-RAG/issues)
+## Why this exists
 
-</div>
+Most introductory RAG tutorials stop at four steps: split the document, embed the chunks, retrieve the top matches by vector similarity, paste them into a prompt. That gets a demo working, and it is also where the quality problems start. Pure vector search misses exact terms and struggles to separate passages that look alike. There is no sense of which retrieved chunk actually mattered, and no measurement of whether retrieval is any good.
 
----
+This project implements the part that comes after the tutorial: hybrid retrieval, reranking, grounded citations, and an evaluation harness that measures the difference. It is deliberately constrained to a free CPU environment, with no GPU and no paid embedding API, because the interesting engineering is in the retrieval design, not the hardware.
 
-## 🌟 What is ContextIQ?
+## How retrieval works
 
-ContextIQ is an advanced **Retrieval-Augmented Generation (RAG)** application that transforms how you interact with your documents. Upload any document, ask questions, get summaries, or generate insights - all powered by state-of-the-art AI models from **OpenAI** and **OpenRouter**.
+![ContextIQ retrieval pipeline: a query fans out to dense and BM25 search, the rankings are combined with reciprocal rank fusion, a cross-encoder reranks the pool, and the top passages become numbered citations for a streamed answer.](docs/architecture.svg)
 
-### ✨ Key Highlights
+Indexing turns a document into overlapping, token-bounded chunks that carry their heading path. Before embedding, each chunk is prefixed with a short contextual header built from the document title and that heading path, so an isolated chunk still records where it came from.
 
-- 🎯 **Dual AI Provider Support**: Choose between OpenAI (GPT-4o, GPT-4, GPT-3.5) or OpenRouter (200+ models including DeepSeek R1 FREE, Claude, Gemini, and more)
-- 📚 **11+ File Formats Supported**: PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, HTML, JSON, XML, RTF
-- 🚀 **Lightning-Fast RAG Pipeline**: Custom TF-IDF embeddings + ChromaDB vector search
-- 💎 **Beautiful Modern UI**: Dark-themed, responsive interface with Tailwind CSS
-- 🔒 **Privacy-First**: API keys stored locally in your browser, never on our servers
-- ⚡ **Smart Caching**: 10-minute response cache for faster interactions
-- 🎨 **Multiple Task Types**: Q&A, Summarization, Action Plans, Creative Writing
+A query then runs two retrievers at once:
 
----
+- **Dense search** embeds the query and the chunks into the same vector space and compares them by cosine similarity. It captures meaning, so it finds passages that answer the question even when they use different words.
+- **BM25** is classical lexical search. It captures the exact terms dense search can smooth over: an identifier, a product name, a number, a negation.
 
-## 🏗️ Architecture
+The two rankings are combined with **reciprocal rank fusion**: each retriever contributes `1 / (k + rank)` to a chunk's score, with `k = 60`. Fusing by rank rather than raw score sidesteps the fact that cosine similarity and BM25 scores live on different scales. A chunk that ranks well in either retriever survives; a chunk that ranks well in both rises to the top.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Frontend (HTML/JS/Tailwind)                │
-│  • Provider Selection (OpenAI/OpenRouter)                     │
-│  • File Upload & Text Input                                   │
-│  • Real-time Chat Interface                                   │
-│  • API Key Management                                          │
-└────────────────────┬─────────────────────────────────────────┘
-                     │ REST API
-┌────────────────────▼─────────────────────────────────────────┐
-│                    FastAPI Backend                             │
-│  • Request Validation (Pydantic)                               │
-│  • Multi-Provider LLM Support                                  │
-│  • File Processing Pipeline                                    │
-│  • Response Caching                                            │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-         ┌───────────┴───────────┐
-         │                       │
-┌────────▼────────┐    ┌─────────▼──────────┐
-│   ChromaDB      │    │  LLM Providers      │
-│ Vector Database │    │  • OpenAI API       │
-│ (TF-IDF)        │    │  • OpenRouter API   │
-└─────────────────┘    └────────────────────┘
+Finally a **cross-encoder reranker** reads the query and each fused candidate together and scores their actual relevance. This is far more accurate than comparing vectors and far too slow to run over a whole corpus, so it runs only on the fused top candidates. The candidate pool is deliberately deep (50 per retriever) because reranking a handful of results changes nothing; the value appears when it pulls the right passage up from rank twenty.
+
+The reranked top passages become numbered sources. The model is instructed to answer only from them, to cite each claim by its marker, and to say so when the sources do not contain the answer rather than fall back on training knowledge.
+
+## Evaluation
+
+Retrieval quality is measured, not asserted. The harness in [`eval/`](eval/) indexes a fictional company handbook together with six distractor handbooks from other invented companies that share the same section structure but none of the same facts. Retrieval runs over the whole corpus (99 chunks), so the passage that answers a question has to be found among many similar-looking ones. The golden set is 21 hand-written questions; 18 have an answer in the document, and 3 are unanswerable on purpose to test abstention.
+
+The same questions run through four retrievers, changing only the retrieval step:
+
+| Arm | Retriever | hit@3 | hit@5 | recall@5 | MRR | nDCG@5 |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | TF-IDF baseline | 0.78 | 0.89 | 0.89 | 0.81 | 0.82 |
+| B | Dense only | 0.67 | 0.72 | 0.72 | 0.57 | 0.58 |
+| C | Hybrid (dense + BM25, fused) | 0.78 | 0.94 | 0.94 | 0.60 | 0.68 |
+| D | Hybrid + rerank | 0.83 | 0.89 | 0.89 | 0.78 | 0.80 |
+
+Read honestly, on this corpus:
+
+- **Dense-only retrieval is the weakest arm.** A small embedding model struggles to separate near-duplicate policy passages from seven different companies. This is the naive pipeline most tutorials produce, and it is the one to beat.
+- **Hybrid fusion recovers recall.** Adding lexical search puts the right passage in the top five 94% of the time, because the distinctive terms in a question (names, numbers) are exactly what BM25 keys on.
+- **Reranking fixes the ordering.** Hybrid gets the right passage into the pool but not always to the top; the reranker lifts hit@3 to its best value and nearly doubles MRR over hybrid alone.
+
+No single arm wins every metric. A properly fit TF-IDF baseline is strong here precisely because the questions are keyword-rich, which is a useful reminder that lexical search is a real baseline and not a straw man. The headline is narrow and defensible: the full pipeline gives the best precision at the top, and the naive dense-only approach is the worst.
+
+These numbers describe one small golden set on one corpus. They are illustrative of direction, not a benchmark. The metrics are deterministic and reproducible:
+
+```bash
+pip install -r requirements.txt -r eval/requirements.txt
+python -m eval.run_ab
 ```
 
----
+An optional answer-faithfulness judge (`--judge --api-key ...`) uses the same free model that generates answers, so it shares that model's biases and is read only as a relative signal between arms.
 
-## 🚀 Quick Start
+## Run it locally
 
-### Prerequisites
+```bash
+pip install -r requirements.txt
+python -m app.warmup          # downloads the embedding and reranker models once
+uvicorn app.main:app --reload
+```
 
-- **Python 3.8+**
-- **API Key** from either:
-  - [OpenAI](https://platform.openai.com/api-keys) - For GPT models
-  - [OpenRouter](https://openrouter.ai/) - For 200+ models (FREE tier available)
+Open http://localhost:8000, paste or upload a document, index it, and ask a question. Retrieval and the trace work without any key. Generating the final answer needs an OpenRouter key, which stays in your browser and is sent only to the provider. The default model is free.
 
-### Installation
+Run the tests with `pip install -r requirements-dev.txt` then `python -m pytest`.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Ab-Romia/ContextIQ-RAG.git
-   cd ContextIQ-RAG
-   ```
+## Deploying
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Run the application**
-   ```bash
-   python main.py
-   ```
-
-   Or use uvicorn directly:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 7860
-   ```
-
-4. **Access the web interface**
-   Open your browser and navigate to:
-   ```
-   http://localhost:7860
-   ```
-
-5. **Configure your AI provider**
-   - Choose between **OpenAI** or **OpenRouter** in the UI
-   - Enter your API key
-   - Test and save the key locally
-
----
-
-## 📖 How to Use
-
-### 1. Choose Your AI Provider
-
-- **OpenAI**: Access to GPT-4o, GPT-4o-mini, GPT-4, GPT-3.5-turbo
-- **OpenRouter**: 200+ models including DeepSeek R1 (FREE), Claude, GPT-4, Gemini, Llama 3, and more
-  - **Default model**: DeepSeek R1 (completely free to use)
-
-### 2. Upload Your Documents
-
-ContextIQ supports a wide range of file formats:
-
-| Category | Formats |
-|----------|---------|
-| **Text** | .txt, .md, .rtf |
-| **Documents** | .pdf, .docx |
-| **Presentations** | .pptx |
-| **Data** | .xlsx, .csv, .json, .xml |
-| **Web** | .html, .htm |
-
-### 3. Index Your Content
-
-Click "Index Context" to process and store your documents in the vector database. The system will:
-- Extract text from your documents
-- Split into manageable chunks (600 characters)
-- Generate TF-IDF embeddings
-- Store in ChromaDB for fast retrieval
-
-### 4. Interact with Your AI Assistant
-
-Choose from multiple task types:
-
-- **Question & Answer**: Get precise answers from your documents
-- **Summarize**: Generate concise summaries
-- **Generate Action Plan**: Create actionable plans from your content
-- **Creative Writing**: Transform your ideas into creative content
-
----
-
-## 🎯 Features in Detail
-
-### 📁 Advanced File Processing
-
-Our robust file processing pipeline handles:
-
-- **PDF**: Multi-page extraction with PyMuPDF
-- **Word Documents**: Paragraphs and tables extraction
-- **PowerPoint**: Slide-by-slide text extraction
-- **Excel/CSV**: Structured data processing with Pandas
-- **HTML**: Clean text extraction with BeautifulSoup
-- **JSON/XML**: Intelligent parsing and formatting
-
-### 🧠 Intelligent RAG Pipeline
-
-1. **Custom TF-IDF Embeddings**
-   - 384-dimensional vectors
-   - N-gram support (1-2)
-   - English stop words filtering
-   - Fallback hashing mechanism
-
-2. **ChromaDB Vector Database**
-   - In-memory storage for speed
-   - Similarity-based retrieval
-   - Configurable chunk retrieval (default: 3)
-
-3. **Smart Context Assembly**
-   - Retrieves relevant chunks
-   - Constructs optimized prompts
-   - Respects token limits per task type
-
-### 🔧 Configurable Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| MAX_TOKENS_CHAT | 4000 | Q&A response tokens |
-| MAX_TOKENS_SUMMARIZE | 3000 | Summary tokens |
-| MAX_TOKENS_PLAN | 5000 | Action plan tokens |
-| MAX_TOKENS_CREATIVE | 6000 | Creative writing tokens |
-| MAX_CHUNKS_RETRIEVE | 3 | Vector search results |
-| CACHE_EXPIRATION | 600s | Response cache duration |
-
----
-
-## 🛠️ Technology Stack
-
-### Backend
-- **FastAPI** - Modern, fast web framework
-- **ChromaDB** - Vector database for embeddings
-- **Scikit-learn** - TF-IDF vectorization
-- **Pydantic** - Data validation
-- **OpenAI SDK** - GPT models integration
-- **Requests** - HTTP client for OpenRouter
-
-### Frontend
-- **Tailwind CSS** - Utility-first CSS framework
-- **Marked.js** - Markdown rendering
-- **Vanilla JavaScript** - No framework bloat
-- **LocalStorage** - Client-side API key storage
-
-### File Processing
-- **PyMuPDF (fitz)** - PDF processing
-- **python-docx** - Word documents
-- **python-pptx** - PowerPoint files
-- **Pandas** - Excel/CSV handling
-- **BeautifulSoup** - HTML parsing
-- **striprtf** - RTF file support
-
----
-
-## 📊 API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Serve main interface |
-| `/health` | GET | Health check |
-| `/api/v1/test-api-key` | POST | Validate API key |
-| `/api/v1/index` | POST | Index text context |
-| `/api/v1/index-file` | POST | Upload & index file |
-| `/api/v1/generate` | POST | Generate AI response |
-| `/api/v1/task` | POST | Execute specialized task |
-| `/api/v1/clear_index` | POST | Clear vector database |
-
----
-
-## 🔒 Privacy & Security
-
-- ✅ API keys stored **only** in browser LocalStorage
-- ✅ No server-side API key storage
-- ✅ All requests use user-provided keys
-- ✅ HTTPS recommended for production
-- ✅ No telemetry or tracking
-- ✅ Open source - audit the code yourself
-
----
-
-## 🚢 Deployment
-
-### Docker
+The repository is a Docker Space. The image uses a non-root Python 3.11 base, installs the CPU-only stack (no PyTorch), and bakes the models in at build time so a cold start does not re-download them. Build and run it the same way the Space does:
 
 ```bash
 docker build -t contextiq .
 docker run -p 7860:7860 contextiq
 ```
 
-### Hugging Face Spaces
+## What this is not
 
-This project is optimized for Hugging Face Spaces deployment. Simply:
+- **Not durable storage.** The index lives in memory for the life of the process. On a free Space that sleeps after inactivity, the index is cleared on restart. This is a single-session demo by design, not a database.
+- **Not multi-tenant.** There is one shared index. It is meant for one person exploring at a time.
+- **Not a contextual-retrieval claim.** The chunk headers are a cheap, template-based form of contextual augmentation. They help, but they are not the model-generated per-chunk context that some published results measure, and no such gain is claimed here.
+- **Not tuned to win.** The evaluation reports what the pipeline does on a small honest set, including where a stage does not help.
 
-1. Create a new Space
-2. Upload the repository files
-3. Set Space SDK to "Docker"
-4. Deploy!
+## Stack
 
-[View Live Demo](https://huggingface.co/spaces/Ab-Romia/Context-Aware-AI)
+FastAPI, fastembed (ONNX, `bge-small-en-v1.5`), bm25s, ChromaDB as a precomputed-vector store, langchain-text-splitters, and any OpenAI-compatible chat API for generation (OpenRouter by default). No GPU, no PyTorch.
 
----
+## References
 
-## 🎨 UI Features
+- Robertson and Zaragoza, *The Probabilistic Relevance Framework: BM25 and Beyond* (2009)
+- Cormack, Clarke, and Buettcher, *Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods* (2009)
+- Nogueira and Cho, *Passage Re-ranking with BERT* (2019)
 
-- 🌙 **Dark Theme**: Easy on the eyes
-- 📱 **Fully Responsive**: Works on mobile, tablet, and desktop
-- 🎭 **Glass-morphism Effects**: Modern, elegant design
-- ⚡ **Real-time Updates**: Live status indicators
-- 📊 **Character/Word Counters**: Track your content
-- 🔄 **Collapsible Sections**: Clean, organized interface
-- 💬 **Markdown Support**: Rich text formatting in responses
+## License
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **OpenRouter** for providing access to 200+ AI models
-- **OpenAI** for GPT models
-- **ChromaDB** for the vector database
-- **FastAPI** for the amazing web framework
-- **Tailwind CSS** for the beautiful UI
-
----
-
-## 📬 Contact
-
-**Ab-Romia** - Abdelrahman Abouroumia
-
-- GitHub: [@Ab-Romia](https://github.com/Ab-Romia)
-- Hugging Face: [Ab-Romia](https://huggingface.co/Ab-Romia)
-
----
-
-<div align="center">
-
-**⭐ Star this repo if you find it helpful! ⭐**
-
-Made with ❤️ by Ab-Romia
-
-</div>
+MIT. See [LICENSE](LICENSE).
