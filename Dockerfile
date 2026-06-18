@@ -1,39 +1,32 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-WORKDIR /app
+# Hugging Face Spaces run containers as a non-root user with UID 1000. Matching that
+# here avoids permission surprises with the model cache and uploaded files.
+RUN useradd -m -u 1000 user
+USER user
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    HF_HOME=/home/user/.cache/huggingface \
+    FASTEMBED_CACHE_PATH=/home/user/.cache/fastembed \
+    PORT=7860 \
+    PYTHONUNBUFFERED=1
 
-# Upgrade pip and install wheel
-RUN pip install --upgrade pip setuptools wheel
+WORKDIR /home/user/app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user . .
 
-# Copy the entire application
-COPY . .
+# Download the embedding and reranker models into the image so a cold start does not
+# re-fetch them. bm25s needs no model. No C toolchain is installed: bm25s runs its
+# scipy path and the rest ship as wheels.
+RUN python -m app.warmup
 
-# Create directories with proper permissions
-RUN mkdir -p /tmp/chroma_db && chmod 777 /tmp/chroma_db
-
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PORT=7860
-ENV PYTHONUNBUFFERED=1
-
-# Expose the port
 EXPOSE 7860
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:7860/health').status==200 else 1)"
 
-# Run the application
-CMD ["python", "main.py"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]

@@ -1,19 +1,23 @@
-# Core Framework
+# Web framework
 fastapi~=0.116.1
 uvicorn~=0.35.0
 pydantic~=2.11.7
 pydantic-settings~=2.10.1
 python-multipart~=0.0.20
 jinja2~=3.1.2
+sse-starlette~=3.4.4
 
-# AI/ML Libraries
-openai~=1.62.0
-chromadb~=1.0.15
-scikit-learn~=1.7.1
-numpy~=2.3.1
-requests~=2.32.4
+# Retrieval stack (CPU only, no torch)
+fastembed~=0.8.0            # ONNX dense embeddings + cross-encoder reranking
+bm25s~=0.3.9               # lexical BM25, pure numpy/scipy (no C toolchain)
+chromadb~=1.5.9            # vector store, used with precomputed embeddings
+langchain-text-splitters~=1.1.2
+tiktoken~=0.13.0
 
-# File Processing Libraries
+# Generation (OpenRouter / OpenAI compatible)
+openai>=2,<3
+
+# Document extraction
 PyMuPDF~=1.25.2
 python-docx~=1.1.2
 python-pptx~=1.0.2
@@ -22,3 +26,7 @@ openpyxl~=3.1.5
 beautifulsoup4~=4.12.3
 striprtf~=0.0.26
 markdown~=3.7
+defusedxml~=0.7.1          # XXE / billion-laughs safe XML parsing
+
+# numpy is resolved transitively by fastembed and chromadb; do not hard pin
+numpy>=1.26
