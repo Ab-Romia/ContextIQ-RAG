@@ -1,106 +1,35 @@
 ---
-title: ContextIQ - Context-Aware AI Assistant
-emoji: 🧠
-colorFrom: purple
-colorTo: blue
+title: ContextIQ
+emoji: 🔍
+colorFrom: green
+colorTo: gray
 sdk: docker
 pinned: true
 license: mit
 app_port: 7860
+models:
+  - BAAI/bge-small-en-v1.5
+  - Xenova/ms-marco-MiniLM-L-6-v2
 ---
 
-# 🧠 ContextIQ - Intelligent Context-Aware AI Assistant
+# ContextIQ
 
-Welcome to **ContextIQ**, a sophisticated RAG (Retrieval-Augmented Generation) application that transforms how you interact with your documents!
+A hybrid-retrieval RAG worked example that runs on CPU.
 
-## 🌟 What Can You Do?
+Index a document, then ask a question. ContextIQ retrieves the passages that answer it and writes a grounded, cited answer. The interface shows the retrieval trace, so you can see how each candidate ranked under dense search, BM25, fusion, and reranking, and which passages were sent to the model.
 
-- 📚 **Upload Documents**: Support for 11+ file formats (PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, HTML, JSON, XML, RTF)
-- 🤖 **Ask Questions**: Get intelligent answers based on your uploaded documents
-- 📝 **Summarize**: Generate concise summaries of your content
-- 📋 **Action Plans**: Create actionable plans from your documents
-- ✍️ **Creative Writing**: Transform your ideas into creative content
+## Using it
 
-## 🎯 Dual AI Provider Support
+1. Paste text or upload a file, then index it. Retrieval reads only from what you index.
+2. Enter an OpenRouter API key. It stays in your browser and is used only to write the answer; the default model is free. Retrieval and the trace work without a key.
+3. Ask a question. The answer streams in with citation markers that link back to their source passages.
 
-Choose your preferred AI provider:
+## How it works
 
-### OpenRouter (FREE DeepSeek Model!)
-- 200+ models including DeepSeek R1 (FREE), Claude, GPT-4, Gemini, Llama 3
-- **Default**: DeepSeek R1 - completely free to use
-- Get your key: [openrouter.ai](https://openrouter.ai/)
+Dense semantic search (`bge-small`, run through ONNX) and lexical BM25 retrieve in parallel. Their rankings are combined with reciprocal rank fusion, then a cross-encoder reranker reorders the top candidates by reading each one against the query. The model answers only from the reranked passages and is told to abstain when they do not contain the answer.
 
-### OpenAI
-- GPT-4o, GPT-4o-mini, GPT-4, GPT-3.5-turbo
-- Production-ready models
-- Get your key: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+The whole pipeline runs on CPU with no GPU and no PyTorch. The retrieval design, an evaluation harness, and the reasoning behind each stage are in the source repository: [github.com/Ab-Romia/ContextIQ-RAG](https://github.com/Ab-Romia/ContextIQ-RAG).
 
-## 🚀 How to Use
+## Notes
 
-1. **Choose Your AI Provider**
-   - Select OpenRouter (free) or OpenAI in the interface
-
-2. **Enter Your API Key**
-   - Your key is stored locally in your browser only
-   - Never sent to our servers
-
-3. **Upload Your Documents**
-   - Drag & drop or browse for files
-   - Or paste text directly
-
-4. **Index Your Content**
-   - Click "Index Context" to process your documents
-
-5. **Start Asking Questions!**
-   - Choose a task type (Q&A, Summarize, Plan, Creative)
-   - Type your question or prompt
-   - Get AI-powered responses based on your documents
-
-## 🔒 Privacy & Security
-
-- ✅ Your API keys are stored **only** in your browser
-- ✅ No server-side storage of API keys
-- ✅ All requests use your own API key
-- ✅ Open source - audit the code yourself
-
-## 🛠️ Technology Stack
-
-- **Backend**: FastAPI + Python
-- **Vector Database**: ChromaDB with custom TF-IDF embeddings
-- **Frontend**: Tailwind CSS + Vanilla JavaScript
-- **AI Providers**: OpenAI SDK + OpenRouter API
-- **File Processing**: PyMuPDF, python-docx, pandas, BeautifulSoup, and more
-
-## 📊 Supported File Formats
-
-| Category | Formats |
-|----------|---------|
-| **Text** | .txt, .md, .rtf |
-| **Documents** | .pdf, .docx |
-| **Presentations** | .pptx |
-| **Data** | .xlsx, .csv, .json, .xml |
-| **Web** | .html, .htm |
-
-## 💡 Tips for Best Results
-
-- **Clear Questions**: Ask specific questions about your documents
-- **Context Matters**: The more relevant text you provide, the better the answers
-- **Chunk Size**: Large documents are automatically split into manageable chunks
-- **Model Selection**:
-  - Use OpenRouter's DeepSeek R1 (FREE) for excellent reasoning at no cost
-  - Use OpenAI's GPT-4o for production workloads
-  - Default DeepSeek model is completely free - no credit card needed!
-
-## 🤝 Open Source
-
-This project is open source! Check out the code on GitHub:
-[github.com/Ab-Romia/ContextIQ-RAG](https://github.com/Ab-Romia/ContextIQ-RAG)
-
-## 📬 Feedback
-
-Found a bug or have a feature request?
-[Open an issue on GitHub](https://github.com/Ab-Romia/ContextIQ-RAG/issues)
-
----
-
-Made with ❤️ by Ab-Romia (Abdelrahman Abouroumia)
+The index is held in memory and is cleared when the Space restarts after sleeping. This is a single-session demo, not durable storage.
