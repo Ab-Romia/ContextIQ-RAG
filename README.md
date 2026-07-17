@@ -46,7 +46,7 @@ Read honestly, on this corpus:
 
 - **Dense-only retrieval is the weakest arm.** A small embedding model struggles to separate near-duplicate policy passages from seven different companies. This is the naive pipeline most tutorials produce, and it is the one to beat.
 - **Hybrid fusion recovers recall.** Adding lexical search puts the right passage in the top five 94% of the time, because the distinctive terms in a question (names, numbers) are exactly what BM25 keys on.
-- **Reranking fixes the ordering.** Hybrid gets the right passage into the pool but not always to the top; the reranker lifts hit@3 to its best value and nearly doubles MRR over hybrid alone.
+- **Reranking fixes the ordering.** Hybrid gets the right passage into the pool but not always to the top; the reranker lifts hit@3 to its best value and MRR from 0.60 to 0.78 over hybrid alone.
 
 No single arm wins every metric. A properly fit TF-IDF baseline is strong here precisely because the questions are keyword-rich, which is a useful reminder that lexical search is a real baseline and not a straw man. The headline is narrow and defensible: the full pipeline gives the best precision at the top, and the naive dense-only approach is the worst.
 
